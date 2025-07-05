@@ -1,7 +1,10 @@
 # Đảm bảo bạn đang ở thư mục gốc DATN
 pwd
 
-# Tạo file .gitignore
+# Xóa file .gitignore hiện tại
+del .gitignore
+
+# Tạo file .gitignore mới đúng
 echo "# Dependencies
 node_modules/
 npm-debug.log*
