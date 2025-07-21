@@ -40,5 +40,5 @@ COPY ecosystem.config.js /app/ecosystem.config.js
 # Expose port 3000 (nginx sẽ listen ở đây)
 EXPOSE 3000
 
-# Start services using ecosystem file and nginx
-CMD pm2 start /app/ecosystem.config.js && nginx -g 'daemon off;' 
+# Start all services using pm2-runtime
+CMD ["pm2-runtime", "start", "/app/ecosystem.config.js"] 

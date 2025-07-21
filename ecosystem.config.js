@@ -18,6 +18,12 @@ module.exports = {
         "PORT": 3001,
         "NODE_ENV": "production",
       }
+    },
+    {
+      name: 'nginx',
+      script: 'nginx',
+      args: '-g "daemon off;"',
+      exp_backoff_restart_delay: 100
     }
   ]
 }; 
