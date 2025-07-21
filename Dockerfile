@@ -34,10 +34,11 @@ RUN apk add --no-cache nginx
 # Copy file nginx.conf vào container
 COPY nginx.conf /etc/nginx/nginx.conf
 
+# Copy ecosystem file
+COPY ecosystem.config.js /app/ecosystem.config.js
+
 # Expose port 3000 (nginx sẽ listen ở đây)
 EXPOSE 3000
 
-# Start backend, frontend và nginx
-CMD pm2 start /app/serverNode_datn/index.js --name backend && \
-    pm2 start "npm" --name frontend -- start --cwd /app/duantn -- -p 3001 && \
-    nginx -g 'daemon off;' 
+# Start services using ecosystem file and nginx
+CMD pm2 start /app/ecosystem.config.js && nginx -g 'daemon off;' 
