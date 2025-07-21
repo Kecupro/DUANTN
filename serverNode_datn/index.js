@@ -126,7 +126,13 @@ const mongooseOptions = {
   tls: false
 };
 
-mongoose.connect(MONGODB_URI, mongooseOptions);
+mongoose.connect(MONGODB_URI, mongooseOptions)
+  .then(() => console.log('MongoDB connected successfully.'))
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  });
+
 const bcrypt = require('bcrypt');
 const path = require('path');
 const fs = require('fs');
