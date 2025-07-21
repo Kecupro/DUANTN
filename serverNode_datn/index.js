@@ -4072,7 +4072,26 @@ app.get("/reviews/user", verifyToken, async (req, res) => {
       }
   });
 
-// Khôi phục lại app.listen để server thực sự chạy và lắng nghe
-app.listen(PORT, () => {
-  console.log(`Backend server is running and listening on port ${PORT}`);
-});
+  // Khôi phục lại app.listen để server thực sự chạy và lắng nghe
+  app.listen(PORT, () => {
+    console.log(`Backend server is running and listening on port ${PORT}`);
+  });
+
+  const userRoute = require('./routes/user');
+  app.use('/api', userRoute);
+  const brandRoute = require('./routes/brand');
+  // ... existing code ...
+  app.use('/api', voucherRoute);
+  const reviewRoute = require('./routes/review');
+  app.use('/api', reviewRoute);
+
+  // Route gốc của backend, dùng để kiểm tra routing
+  app.get('/', (req, res) => {
+      res.json({'thongbao':'Ban da truy cap vao backend'});
+  });
+
+  // Middleware xử lý lỗi
+  app.use((err, req, res, next) => {
+  console.error(err.stack);
+  // ... existing code ...
+  });
