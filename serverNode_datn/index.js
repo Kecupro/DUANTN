@@ -137,6 +137,7 @@ const bcrypt = require('bcrypt');
 const path = require('path');
 const fs = require('fs');
 const session = require('express-session');
+const MongoStore = require('connect-mongo');
 const passport = require('passport');
 require('./auth/google'); // import cấu hình passport google
 require('./auth/facebook'); // import cấu hình passport facebook
@@ -251,7 +252,14 @@ const canDeleteUser = (req, res, next) => {
 app.use(session({
   secret: process.env.JWT_SECRET || 'your_jwt_secret_key',
   resave: false,
-  saveUninitialized: false
+  saveUninitialized: false,
+  store: MongoStore.create({ 
+    mongoUrl: MONGODB_URI,
+    collectionName: 'sessions' 
+  }),
+  cookie: {
+    maxAge: 1000 * 60 * 60 * 24 // 1 day
+  }
 }));
 app.use(passport.initialize());
 app.use(passport.session());
