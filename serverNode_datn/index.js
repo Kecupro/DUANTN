@@ -4072,4 +4072,7 @@ app.get("/reviews/user", verifyToken, async (req, res) => {
       }
   });
 
-module.exports = app;
+// Khôi phục lại app.listen để server thực sự chạy và lắng nghe
+app.listen(PORT, () => {
+  console.log(`Backend server is running and listening on port ${PORT}`);
+});
