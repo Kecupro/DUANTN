@@ -126,14 +126,12 @@ if (!MONGODB_URI) {
   process.exit(1);
 }
 
-// Thêm SSL options cho MongoDB Atlas
+// Thêm SSL options cho MongoDB Atlas - Đã bị loại bỏ vì đã có trong URI
 const mongooseOptions = {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  ssl: false,
-  tls: false
+  // useNewUrlParser và useUnifiedTopology đã lỗi thời và được loại bỏ
 };
 
+// Kết nối tới MongoDB
 mongoose.connect(MONGODB_URI, mongooseOptions)
   .then(() => console.log('MongoDB connected successfully.'))
   .catch(err => {
