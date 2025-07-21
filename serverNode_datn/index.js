@@ -116,7 +116,15 @@ const uploadNew = multer({ storage: storageNew });
 const mongoose = require('mongoose');
 
 // Lấy URI từ biến môi trường, nếu không có thì dùng local
-const MONGODB_URI = process.env.DB_URI || 'mongodb://127.0.0.1:27017/DATN_V2';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/DATN_V2';
+const PORT = process.env.PORT || 3000;
+
+console.log("Attempting to connect to MongoDB with URI:", MONGODB_URI); // DEBUGGING LINE
+
+if (!MONGODB_URI) {
+  console.error("FATAL ERROR: MONGODB_URI is not defined in environment variables.");
+  process.exit(1);
+}
 
 // Thêm SSL options cho MongoDB Atlas
 const mongooseOptions = {
