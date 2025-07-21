@@ -1,0 +1,14 @@
+{
+  "services": [
+    {
+      "name": "backend",
+      "root": "serverNode_datn",
+      "start": "node index.js"
+    },
+    {
+      "name": "frontend",
+      "root": "duantn",
+      "start": "npm run start"
+    }
+  ]
+} 
