@@ -39,5 +39,5 @@ EXPOSE 3000
 
 # Start backend, frontend và nginx
 CMD pm2 start /app/serverNode_datn/index.js --name backend && \
-    pm2 start "node_modules/next/dist/bin/next" --name frontend -- start -p 3001 --cwd /app/duantn && \
+    pm2 start "npm" --name frontend -- start --cwd /app/duantn -- -p 3001 && \
     nginx -g 'daemon off;' 
