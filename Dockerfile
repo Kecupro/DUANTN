@@ -37,8 +37,8 @@ COPY nginx.conf /etc/nginx/nginx.conf
 # Copy ecosystem file
 COPY ecosystem.config.js /app/ecosystem.config.js
 
-# Expose port 3000 (nginx sẽ listen ở đây)
-EXPOSE 3000
+# Expose port 8080 (nginx sẽ listen ở đây)
+EXPOSE 8080
 
 # Start all services using pm2-runtime
 CMD ["pm2-runtime", "start", "/app/ecosystem.config.js"] 

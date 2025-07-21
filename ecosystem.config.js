@@ -4,20 +4,16 @@ module.exports = {
       name: 'backend',
       script: 'index.js',
       cwd: '/app/serverNode_datn',
-      env: {
-        "PORT": 3000,
-        "NODE_ENV": "production",
-      }
+      // Chạy backend trên port 3001
+      env: { "PORT": 3001, "NODE_ENV": "production" }
     },
     {
       name: 'frontend',
       script: 'npm',
       args: 'start',
       cwd: '/app/duantn',
-      env: {
-        "PORT": 3001,
-        "NODE_ENV": "production",
-      }
+      // Chạy frontend trên port 3000
+      env: { "PORT": 3000, "NODE_ENV": "production" }
     },
     {
       name: 'nginx',
