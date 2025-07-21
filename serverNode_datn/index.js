@@ -1,14 +1,28 @@
 require('dotenv').config();
 const exp = require('express');
 const app = exp();
-const port = 3000;
+const port = process.env.PORT || 3000;
 const cors = require('cors');
 const multer = require('multer');
 //app.use( [ cors() , exp.json() ] );
 app.use( exp.json() );
+
+const allowedOrigins = [
+  'http://localhost:3005',
+  'https://duantn-frontend-2.vercel.app'
+];
+
 app.use(cors({
-    origin: "http://localhost:3005", 
-    credentials: true 
+  origin: function(origin, callback){
+    // Cho phép request không có origin (như từ Postman)
+    if(!origin) return callback(null, true);
+    if(allowedOrigins.indexOf(origin) === -1){
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true // nếu bạn dùng cookie
 }));
 
 // ! Lưu ảnh danh mục sản phẩm
@@ -102,9 +116,17 @@ const uploadNew = multer({ storage: storageNew });
 const mongoose = require('mongoose');
 
 // Lấy URI từ biến môi trường, nếu không có thì dùng local
-const MONGODB_URI = process.env.DB_URI || 'mongodb+srv://root:123@cluster0.2ceby11.mongodb.net/DATN_V3?retryWrites=true&w=majority&appName=Cluster0';
+const MONGODB_URI = process.env.DB_URI || 'mongodb://127.0.0.1:27017/DATN_V2';
 
-mongoose.connect(MONGODB_URI);
+// Thêm SSL options cho MongoDB Atlas
+const mongooseOptions = {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  ssl: false,
+  tls: false
+};
+
+mongoose.connect(MONGODB_URI, mongooseOptions);
 const bcrypt = require('bcrypt');
 const path = require('path');
 const fs = require('fs');
@@ -113,7 +135,7 @@ const passport = require('passport');
 require('./auth/google'); // import cấu hình passport google
 require('./auth/facebook'); // import cấu hình passport facebook
 const ObjectId = mongoose.Types.ObjectId;
-const conn = mongoose.createConnection(MONGODB_URI);
+const conn = mongoose.createConnection(MONGODB_URI, mongooseOptions);
 const newsSchema = require("./model/schemaNews");
 const categoryNewsSchema = require("./model/schemaCategoryNews");
 const userSchema = require("./model/schemaUser");
@@ -180,7 +202,7 @@ app.use('/uploads', exp.static(path.join(__dirname, 'uploads')));
 const jwt = require('jsonwebtoken');
 const User = mongoose.model('User', userSchema);
 
-const JWT_SECRET = 'ef9acdfacc73cb783301ab499281cdb28098f3100c43df3c3c5f60cfa902abc9'; 
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const verifyToken = (req, res, next) => {
   const token = req.headers['authorization']?.split(' ')[1];
