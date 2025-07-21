@@ -18,8 +18,6 @@ interface WishlistItem {
     updated_at: string;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
-
 export default function ProductNew() {
     const [products, setProducts] = useState<IProduct[]>([]);
     const [wishlistStatus, setWishlistStatus] = useState<{[key: string]: boolean}>({});
@@ -27,7 +25,7 @@ export default function ProductNew() {
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        fetch(`${API_URL}/api/sp_moi`)
+        fetch(`/api/sp_moi`)
             .then((res) => res.json())
             .then((data) => setProducts(data))
             .catch((err) => console.error("Lỗi fetch sp:", err));
@@ -39,7 +37,7 @@ export default function ProductNew() {
             const token = localStorage.getItem("token");
             if (token) {
                 try {
-                    const res = await fetch(`${API_URL}/user/wishlist`, {
+                    const res = await fetch(`/user/wishlist`, {
                         headers: {
                             'Authorization': `Bearer ${token}`
                         }

@@ -41,7 +41,7 @@ const BrandDetailPage: React.FC = () => {
 
         console.log("Fetching brand with ID:", params.id);
         const res = await fetch(
-          `http://localhost:3000/api/admin/brand/${params.id}`
+          `/api/admin/brand/${params.id}`
         );
 
         console.log("Response status:", res.status);

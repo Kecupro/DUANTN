@@ -63,7 +63,7 @@ const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/login`, {
+      const response = await fetch(`/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -147,7 +147,7 @@ const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/register`, {
+      const response = await fetch(`/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -194,7 +194,7 @@ const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/verify-email`, {
+      const response = await fetch(`/verify-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, otp }),
@@ -233,7 +233,7 @@ const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
     }
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/request-password-reset`, {
+      const response = await fetch(`/request-password-reset`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -263,7 +263,7 @@ const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
     }
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/reset-password`, {
+      const response = await fetch(`/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, otp, newPassword: password }),

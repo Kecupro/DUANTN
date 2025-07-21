@@ -7,8 +7,6 @@ import WishlistButton from '../components/WishlistButton';
 import { IProduct } from '../cautrucdata';
 import { IBrand } from '../cautrucdata';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
-
 const SearchPage = () => {
   const searchParams = useSearchParams();
   const query = searchParams.get('query');
@@ -31,7 +29,7 @@ const SearchPage = () => {
   }, [query, filters]);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/brand`)
+    fetch(`/api/brand`)
       .then(res => res.json())
       .then(data => setBrands(data));
   }, []);
@@ -46,7 +44,7 @@ const SearchPage = () => {
         ...filters
       });
       
-      const response = await fetch(`${API_URL}/api/search?${params}`);
+      const response = await fetch(`/api/search?${params}`);
       const data = await response.json();
       console.log('API search response:', data);
       setProducts(data.products || []);
@@ -61,7 +59,7 @@ const SearchPage = () => {
   // Fetch sản phẩm nổi bật khi không có kết quả
   useEffect(() => {
     if (!loading && products.length === 0) {
-      fetch(`${API_URL}/api/products/top-rated?limit=3`)
+      fetch(`/api/products/top-rated?limit=3`)
         .then(res => res.json())
         .then(data => setSuggestedProducts(data || []));
     } else {
