@@ -3535,25 +3535,23 @@ app.get("/reviews/user", verifyToken, async (req, res) => {
     const id = req.params.id;
   
     try {
-      const count = await ProductModel.countDocuments({
-        brand_id: id,
-      });
+      const count = await ProductModel.countDocuments({ brand_id: id });
       if (count > 0) {
         return res.status(400).json({
-          thong_bao: "Không thể xóa vì vẫn còn sản phẩm thuộc thương hiệu này.",
+          thong_bao: "Không thể xóa vì vẫn còn sản phẩm thuộc loại này.",
         });
       }
   
       const deleted = await BrandModel.findByIdAndDelete(id);
   
       if (deleted) {
-        res.json({ message: "Xóa thương hiệu thành công!" });
+        res.json({ message: "Xóa thành công!" });
       } else {
-        res.status(404).json({ error: "Không tìm thấy brand với ID này." });
+        res.status(404).json({ error: "Không tìm thấy thương hiệu với ID này." });
       }
     } catch (error) {
-      console.error("Lỗi khi xóa brand:", error);
-      res.status(500).json({ error: "Lỗi khi xóa thương hiệu." });
+      console.error("Lỗi khi xóa:", error);
+      res.status(500).json({ error: "Lỗi khi xóa." });
     }
   });
   // ! <== End Brand ==>
@@ -4060,4 +4058,4 @@ app.get("/reviews/user", verifyToken, async (req, res) => {
       }
   });
 
-app.listen(port, () => console.log(`Ung dung dang chay voi port ${port}`));
+module.exports = app;
