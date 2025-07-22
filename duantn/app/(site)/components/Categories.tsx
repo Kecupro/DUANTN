@@ -10,11 +10,10 @@ import { IBrand } from "../cautrucdata";
 export default function Categories() {
 	const [brands, setBrands] = useState<IBrand[]>([]);
 	const containerRef = useRef<HTMLDivElement>(null);
-	const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 	// Fetch danh sách thương hiệu
 	useEffect(() => {
-		fetch(`${API_URL}/api/brand`)
+		fetch('http://localhost:3000/api/brand')
 			.then((res) => res.json())
 			.then((data) => setBrands(data))
 			.catch((err) => console.error("Lỗi fetch brand:", err));
@@ -73,7 +72,7 @@ export default function Categories() {
 								>
 									<div className="overflow-hidden w-full h-full">
 										<img
-											src={`/upload/brand/${cat.image}.webp`}
+											src={`/upload/brand/${cat.image}`}
 											alt={cat.name}
 											className="w-full h-full object-contain mb-3 transition-all duration-700 group-hover:scale-110 group-hover:-translate-y-2"
 										/>

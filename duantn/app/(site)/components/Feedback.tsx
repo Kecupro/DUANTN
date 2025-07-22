@@ -35,7 +35,7 @@ export default function Feedback() {
   useEffect(() => {
     const fetchTopRatedProducts = async () => {
       try {
-        const response = await fetch(`/api/products/top-rated?limit=6`);
+        const response = await fetch('http://localhost:3000/api/products/top-rated?limit=6');
         const data = await response.json();
         setProducts(data);
       } catch (error) {

@@ -29,7 +29,7 @@ const SearchPage = () => {
   }, [query, filters]);
 
   useEffect(() => {
-    fetch(`/api/brand`)
+    fetch('http://localhost:3000/api/brand')
       .then(res => res.json())
       .then(data => setBrands(data));
   }, []);
@@ -44,7 +44,7 @@ const SearchPage = () => {
         ...filters
       });
       
-      const response = await fetch(`/api/search?${params}`);
+      const response = await fetch(`http://localhost:3000/api/search?${params}`);
       const data = await response.json();
       console.log('API search response:', data);
       setProducts(data.products || []);
@@ -59,7 +59,7 @@ const SearchPage = () => {
   // Fetch sản phẩm nổi bật khi không có kết quả
   useEffect(() => {
     if (!loading && products.length === 0) {
-      fetch(`/api/products/top-rated?limit=3`)
+      fetch('http://localhost:3000/api/products/top-rated?limit=3')
         .then(res => res.json())
         .then(data => setSuggestedProducts(data || []));
     } else {
