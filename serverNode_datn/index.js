@@ -1,4 +1,4 @@
-require('dotenv').config();
+
 const exp = require('express');
 const app = exp();
 const port = process.env.PORT || 3000;
