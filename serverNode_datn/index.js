@@ -4077,8 +4077,7 @@ app.get("/reviews/user", verifyToken, async (req, res) => {
     console.log(`Backend server is running and listening on port ${PORT}`);
   });
 
-  // const userRoute = require('./routes/user');
-  // app.use('/api', userRoute);
+ 
   const brandRoute = require('./routes/brand');
   // ... existing code ...
   app.use('/api', voucherRoute);
