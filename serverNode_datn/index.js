@@ -4078,19 +4078,9 @@ app.get("/reviews/user", verifyToken, async (req, res) => {
   });
 
  
-  const brandRoute = require('./routes/brand');
+  // const brandRoute = require('./routes/brand');
+  // // ... existing code ...
+  // app.use('/api', brandRoute);
+  // const reviewRoute = require('./routes/review');
+  // app.use('/api', reviewRoute);
   // ... existing code ...
-  app.use('/api', voucherRoute);
-  const reviewRoute = require('./routes/review');
-  app.use('/api', reviewRoute);
-
-  // Route gốc của backend, dùng để kiểm tra routing
-  app.get('/', (req, res) => {
-      res.json({'thongbao':'Ban da truy cap vao backend'});
-  });
-
-  // Middleware xử lý lỗi
-  app.use((err, req, res, next) => {
-  console.error(err.stack);
-  // ... existing code ...
-  });
