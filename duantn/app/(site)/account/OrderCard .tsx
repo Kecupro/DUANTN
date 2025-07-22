@@ -23,7 +23,7 @@ export default function OrderCard({ user_id }: OrderCardProps) {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const res = await fetch(`/api/orders?user_id=${user_id}`);
+        const res = await fetch(`http://localhost:3000/api/orders?user_id=${user_id}`);
         const data: IOrder[] = await res.json();
         setOrders(data);
 
@@ -31,7 +31,7 @@ export default function OrderCard({ user_id }: OrderCardProps) {
         const detailMap: Record<string, IOrderDetail[]> = {};
         await Promise.all(
           data.map(async (order) => {
-            const detailRes = await fetch(`/api/order-details/${order._id}`);
+            const detailRes = await fetch(`http://localhost:3000/api/order-details/${order._id}`);
             const details: IOrderDetail[] = await detailRes.json();
             detailMap[order._id] = details;
           })
@@ -55,7 +55,7 @@ export default function OrderCard({ user_id }: OrderCardProps) {
       if (!token) return;      
   
       try {
-        const res = await fetch(`/reviews/user`, {
+        const res = await fetch(`http://localhost:3000/reviews/user`, {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
@@ -80,7 +80,7 @@ export default function OrderCard({ user_id }: OrderCardProps) {
   const handleCancelOrder = async (order_id: string) => {
   
     try {
-      await fetch(`/api/cancel-order/${order_id}`, {
+      await fetch(`http://localhost:3000/api/cancel-order/${order_id}`, {
         method: "PUT",
       });
       // Reload lại danh sách

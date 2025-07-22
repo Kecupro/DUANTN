@@ -22,7 +22,7 @@ export default function News() {
 
   const fetchNews = async () => {
     try {
-      const response = await axios.get('/api/news');
+      const response = await axios.get('http://localhost:3000/api/news');
       setNewsList(response.data.news);
     } catch (error) {
       console.error('Error fetching news:', error);

@@ -13,7 +13,7 @@ export default function Categories() {
 
 	// Fetch danh sách thương hiệu
 	useEffect(() => {
-		fetch('/api/brand')
+		fetch('http://localhost:3000/api/brand')
 			.then((res) => res.json())
 			.then((data) => setBrands(data))
 			.catch((err) => console.error("Lỗi fetch brand:", err));
