@@ -25,7 +25,7 @@ export default function ProductNew() {
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        fetch('http://localhost:3000/api/sp_moi')
+        fetch('/api/sp_moi')
             .then((res) => res.json())
             .then((data) => setProducts(data))
             .catch((err) => console.error("Lỗi fetch sp:", err));
