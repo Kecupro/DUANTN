@@ -10,26 +10,35 @@ import 'swiper/css/navigation';
 import { Navigation, Autoplay } from 'swiper/modules';
 
 
+const mockNews = [
+  { _id: 'n1', title: 'Tin demo 1', content: 'Nội dung tin demo 1', image: 'sport_watch_1.jpg', news_status: 1, views: 100, created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z', category: { name: 'Khuyến mãi' } },
+  { _id: 'n2', title: 'Tin demo 2', content: 'Nội dung tin demo 2', image: 'smartwatch_10.jpg', news_status: 1, views: 50, created_at: '2024-01-02T00:00:00Z', updated_at: '2024-01-02T00:00:00Z', category: { name: 'Sự kiện' } },
+  { _id: 'n3', title: 'Tin demo 3', content: 'Nội dung tin demo 3', image: 'dress_watch_10.jpg', news_status: 1, views: 70, created_at: '2024-01-03T00:00:00Z', updated_at: '2024-01-03T00:00:00Z', category: { name: 'Khuyến mãi' } },
+  { _id: 'n4', title: 'Tin demo 4', content: 'Nội dung tin demo 4', image: 'dive_watch_10.jpg', news_status: 1, views: 30, created_at: '2024-01-04T00:00:00Z', updated_at: '2024-01-04T00:00:00Z', category: { name: 'Sự kiện' } },
+  { _id: 'n5', title: 'Tin demo 5', content: 'Nội dung tin demo 5', image: 'luxury_watch_10.jpg', news_status: 1, views: 90, created_at: '2024-01-05T00:00:00Z', updated_at: '2024-01-05T00:00:00Z', category: { name: 'Khuyến mãi' } },
+  { _id: 'n6', title: 'Tin demo 6', content: 'Nội dung tin demo 6', image: 'sport_watch_9.jpg', news_status: 1, views: 60, created_at: '2024-01-06T00:00:00Z', updated_at: '2024-01-06T00:00:00Z', category: { name: 'Sự kiện' } }
+];
+
 export default function News() {
-  const [newsList, setNewsList] = useState<INews[]>([]);
+  const [newsList] = useState(mockNews);
   const [loading, setLoading] = useState(true);
 
   // const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   useEffect(() => {
-    fetchNews();
+    // fetchNews(); // Bỏ fetchNews
   }, []);
 
-  const fetchNews = async () => {
-    try {
-      const response = await axios.get('http://localhost:3000/api/news');
-      setNewsList(response.data.news);
-    } catch (error) {
-      console.error('Error fetching news:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // const fetchNews = async () => { // Bỏ fetchNews
+  //   try {
+  //     const response = await axios.get('http://localhost:3000/api/news');
+  //     setNewsList(response.data.news);
+  //   } catch (error) {
+  //     console.error('Error fetching news:', error);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   if (loading) {
     return (

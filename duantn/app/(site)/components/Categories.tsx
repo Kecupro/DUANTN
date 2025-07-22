@@ -7,17 +7,16 @@ import "swiper/css/navigation";
 import { useEffect, useState, useRef } from "react";
 import { IBrand } from "../cautrucdata";
 
-export default function Categories() {
-	const [brands, setBrands] = useState<IBrand[]>([]);
-	const containerRef = useRef<HTMLDivElement>(null);
+const mockBrands = [
+  { _id: 'b1', name: 'Brand A', productCount: 2, image: 'luxury-shoping1-1.png.webp' },
+  { _id: 'b2', name: 'Brand B', productCount: 1, image: 'luxshopping77-1.png.webp' },
+  { _id: 'b3', name: 'Brand C', productCount: 1, image: 'vesus-luxury-shopping1-1.png.webp' },
+  { _id: 'b4', name: 'Brand D', productCount: 1, image: 'luxshoppingvn2-1.png.webp' }
+];
 
-	// Fetch danh sách thương hiệu
-	useEffect(() => {
-		fetch('http://localhost:3000/api/brand')
-			.then((res) => res.json())
-			.then((data) => setBrands(data))
-			.catch((err) => console.error("Lỗi fetch brand:", err));
-	}, []);
+export default function Categories() {
+	const [brands] = useState(mockBrands);
+	const containerRef = useRef<HTMLDivElement>(null);
 
 	// Intersection Observer for staggered animations
 	useEffect(() => {

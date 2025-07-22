@@ -26,8 +26,17 @@ interface TopRatedProduct {
   };
 }
 
+const mockTopRatedProducts = [
+  { _id: '1', name: 'Đồng hồ nổi bật 1', price: 1000000, sale_price: 900000, main_image: { image: 'bulova-accu-swiss-a-15-mechanical-watch-40mm1.jpg_980_980.webp', alt: 'sp1' }, brand: { _id: 'b1', name: 'Brand A' }, averageRating: 4.5, reviewCount: 10 },
+  { _id: '2', name: 'Đồng hồ nổi bật 2', price: 2000000, sale_price: 0, main_image: { image: 'bulova-accu-swiss-tellaro-automatic-watch-43mm4.jpg.webp', alt: 'sp2' }, brand: { _id: 'b2', name: 'Brand B' }, averageRating: 4.0, reviewCount: 5 },
+  { _id: '3', name: 'Đồng hồ nổi bật 3', price: 1500000, sale_price: 1200000, main_image: { image: 'bulova-murren-mechanical-hand-wind-automatic-watch-40mm1.jpg.webp', alt: 'sp3' }, brand: { _id: 'b3', name: 'Brand C' }, averageRating: 4.2, reviewCount: 7 },
+  { _id: '4', name: 'Đồng hồ nổi bật 4', price: 2500000, sale_price: 0, main_image: { image: 'breguet-tradition-dame-7038bb-1t-9v6-d00d-watch-37mm.jpg_980_980.webp', alt: 'sp4' }, brand: { _id: 'b4', name: 'Brand D' }, averageRating: 4.8, reviewCount: 12 },
+  { _id: '5', name: 'Đồng hồ nổi bật 5', price: 1800000, sale_price: 1500000, main_image: { image: 'bulova-accu-swiss-watch-31mm.jpg_980_980.webp', alt: 'sp5' }, brand: { _id: 'b1', name: 'Brand A' }, averageRating: 4.6, reviewCount: 8 },
+  { _id: '6', name: 'Đồng hồ nổi bật 6', price: 3000000, sale_price: 2700000, main_image: { image: 'bulova-accutron-masella-chronograph-black-watch-40mm.jpg_980_980.webp', alt: 'sp6' }, brand: { _id: 'b2', name: 'Brand B' }, averageRating: 4.7, reviewCount: 9 }
+];
+
 export default function Feedback() {
-  const [products, setProducts] = useState<TopRatedProduct[]>([]);
+  const [products] = useState(mockTopRatedProducts);
   const [loading, setLoading] = useState(true);
 
   // const API_URL = process.env.NEXT_PUBLIC_API_URL;

@@ -18,18 +18,18 @@ interface WishlistItem {
     updated_at: string;
 }
 
+const mockProducts = [
+  { _id: '1', name: 'Đồng hồ demo 1', price: 1000000, sale_price: 900000, main_image: { image: 'breguet-classique-quantieme-perpetuel-7327bb-11-9vu-39mm.jpg.webp', alt: 'sp1' }, brand: { _id: 'b1', name: 'Brand A' }, quantity: 10, views: 100 },
+  { _id: '2', name: 'Đồng hồ demo 2', price: 2000000, sale_price: 0, main_image: { image: 'bulova-accu-swiss-tellaro-automatic-watch-43mm4.jpg.webp', alt: 'sp2' }, brand: { _id: 'b2', name: 'Brand B' }, quantity: 5, views: 50 },
+  { _id: '3', name: 'Đồng hồ demo 3', price: 1500000, sale_price: 1200000, main_image: { image: 'bulova-murren-mechanical-hand-wind-automatic-watch-40mm1.jpg.webp', alt: 'sp3' }, brand: { _id: 'b3', name: 'Brand C' }, quantity: 8, views: 80 },
+  { _id: '4', name: 'Đồng hồ demo 4', price: 2500000, sale_price: 0, main_image: { image: 'breguet-tradition-dame-7038bb-1t-9v6-d00d-watch-37mm.jpg_980_980.webp', alt: 'sp4' }, brand: { _id: 'b4', name: 'Brand D' }, quantity: 3, views: 30 }
+];
+
 export default function ProductNew() {
-    const [products, setProducts] = useState<IProduct[]>([]);
+    const [products] = useState(mockProducts);
     const [wishlistStatus, setWishlistStatus] = useState<{[key: string]: boolean}>({});
     const { user } = useAuth();
     const containerRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        fetch('http://localhost:3000/api/sp_moi')
-            .then((res) => res.json())
-            .then((data) => setProducts(data))
-            .catch((err) => console.error("Lỗi fetch sp:", err));
-    }, []);
 
     // Fetch wishlist status for all products
     useEffect(() => {
