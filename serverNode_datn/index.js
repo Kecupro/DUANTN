@@ -1,16 +1,36 @@
 require('dotenv').config();
 const exp = require('express');
 const app = exp();
-const port = 3000;
+const port = process.env.PORT || 3000;
 const cors = require('cors');
-const slugify = require('slugify');
 const multer = require('multer');
 //app.use( [ cors() , exp.json() ] );
 app.use( exp.json() );
+
+const allowedOrigins = [
+  'http://localhost:3005',
+  'https://duantn-frontend-2.vercel.app'
+];
+
 app.use(cors({
-    origin: "http://localhost:3005", 
-    credentials: true 
+  origin: function(origin, callback){
+    // Cho phép request không có origin (như từ Postman)
+    if(!origin) return callback(null, true);
+    if(allowedOrigins.indexOf(origin) === -1){
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true // nếu bạn dùng cookie
 }));
+
+// Thêm middleware CORS cho mock API (chỉ dùng cho demo)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  next();
+});
 
 // ! Lưu ảnh danh mục sản phẩm
 const storageCateProduct = multer.diskStorage({
@@ -101,21 +121,45 @@ const uploadNew = multer({ storage: storageNew });
 // });
 
 const mongoose = require('mongoose');
-mongoose.connect('mongodb://127.0.0.1:27017/DATN_V2');
+
+// Lấy URI từ biến môi trường, nếu không có thì dùng local
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/DATN_V2';
+const PORT = process.env.PORT || 3000;
+
+console.log("Attempting to connect to MongoDB with URI:", MONGODB_URI); // DEBUGGING LINE
+
+if (!MONGODB_URI) {
+  console.error("FATAL ERROR: MONGODB_URI is not defined in environment variables.");
+  process.exit(1);
+}
+
+// Thêm SSL options cho MongoDB Atlas - Đã bị loại bỏ vì đã có trong URI
+const mongooseOptions = {
+  // useNewUrlParser và useUnifiedTopology đã lỗi thời và được loại bỏ
+};
+
+// Kết nối tới MongoDB
+mongoose.connect(MONGODB_URI, mongooseOptions)
+  .then(() => console.log('MongoDB connected successfully.'))
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  });
+
 const bcrypt = require('bcrypt');
 const path = require('path');
 const fs = require('fs');
 const session = require('express-session');
+const MongoStore = require('connect-mongo');
 const passport = require('passport');
 require('./auth/google'); // import cấu hình passport google
-require('./auth/facebook');
+require('./auth/facebook'); // import cấu hình passport facebook
 const ObjectId = mongoose.Types.ObjectId;
-const conn = mongoose.createConnection('mongodb://127.0.0.1:27017/DATN_V2');
+const conn = mongoose.createConnection(MONGODB_URI, mongooseOptions);
 const newsSchema = require("./model/schemaNews");
 const categoryNewsSchema = require("./model/schemaCategoryNews");
 const userSchema = require("./model/schemaUser");
 const voucherSchema = require("./model/schemaVoucher");
-const VoucherUserSchema= require("./model/schemaVoucherUser")
 const brandSchema = require("./model/schemaBrand");
 const productSchema = require("./model/schemaProduct");
 const productImageSchema = require("./model/schemaProductImages");
@@ -132,7 +176,6 @@ const NewsModel = conn.model("news", newsSchema);
 const CategoryNewsModel = conn.model("category_news", categoryNewsSchema);
 const UserModel = conn.model("users", userSchema);
 const VoucherModel = conn.model("vouchers", voucherSchema);
-const VoucherUserModel = conn.model("voucher_user",VoucherUserSchema)
 const BrandModel = conn.model("brands", brandSchema);
 const ProductModel = conn.model("products", productSchema);
 const ProductImageModel = conn.model("product_images", productImageSchema);
@@ -144,221 +187,6 @@ const ReviewModel = conn.model("reviews", reviewsSchema);
 const WishlistModel = conn.model("wishlists", wishlistSchema);
 const AddressModel = conn.model("address", addressSchema);
 const PaymentMethodModel = conn.model("payment_methods", PaymentMethoaShema);
-
-
-const verifyOptionalToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    req.user = null;
-    return next();
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) {
-      req.user = null;
-    } else {
-      req.user = user;
-    }
-    next();
-  });
-};
-
-
-
-const http = require('http');
-const { Server } = require('socket.io');
-const server = http.createServer(app);
-const { body, validationResult } = require('express-validator');
-const nodemailer = require('nodemailer');
-// Load models
-const MessageSchema = require('./model/schemaMessage');
-const ConversationSchema = require('./model/schemaConversation');
-const MessageModel = conn.model('messages', MessageSchema);
-const ConversationModel = conn.model('conversations', ConversationSchema);
-
-// Setup Socket.IO
-const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
-  }
-});
-
-app.use(exp.json());
-
-io.on('connection', (socket) => {
-  console.log('✅ User connected:', socket.id);
-
-  socket.on('typing', ({ conversationId, userId }) => {
-    socket.to(conversationId).emit('typing', { userId });
-  });
-  
-
-  // Join conversation room
-  socket.on('joinConversation', (conversationId) => {
-    socket.join(conversationId);
-  });
-
-  // Send message
-  socket.on('sendMessage', async (msg) => {
-    try {
-      let senderId = msg.senderId || 'guest';
-      let senderName = msg.senderName || 'Khách';
-      let senderAvatar = msg.senderAvatar || '';
-  
-      // Nếu có token thì override thông tin từ token
-      if (msg.token) {
-        try {
-          const decoded = jwt.verify(msg.token, process.env.JWT_SECRET);
-          console.log(decoded);
-          
-          if (decoded) {
-            senderId = decoded.id;
-            senderName = decoded.name;
-            senderAvatar = decoded.avatar || '';
-          }
-        } catch (err) {
-          console.warn('❗ Token không hợp lệ hoặc hết hạn:', err.message);
-        }
-      }
-  
-      const newMessage = new MessageModel({
-        ...msg,
-        senderId,
-        senderName,
-        senderAvatar,
-        createdAt: new Date(),
-      });
-  
-      await newMessage.save();
-  
-      await ConversationModel.findOneAndUpdate(
-        { conversationId: msg.conversationId },
-        {
-          conversationId: msg.conversationId,
-          $addToSet: {
-            participants: {
-              userId: senderId,
-              userName: senderName,
-              userAvatar: senderAvatar,
-            }
-          },
-          lastMessage: msg.text || (msg.image ? '[Hình ảnh]' : msg.file ? '[File]' : ''),
-          lastMessageType: msg.messageType,
-          lastMessageSenderId: senderId,
-          lastTime: new Date(),
-        },
-        { upsert: true, new: true }
-      );
-  
-      io.to(msg.conversationId).emit('newMessage', newMessage);
-  
-    } catch (error) {
-      console.error('❌ Lỗi khi gửi tin nhắn:', error);
-    }
-  });
-  
-
-  // Seen messages
-  socket.on('seenMessage', async ({ conversationId, userId }) => {
-    try {
-      await MessageModel.updateMany(
-        { conversationId, seenBy: { $ne: userId } },
-        { $addToSet: { seenBy: userId } }
-      );
-      io.to(conversationId).emit('messagesSeen', { conversationId, userId });
-    } catch (error) {
-      console.error('❌ Lỗi khi cập nhật seen:', error);
-    }
-  });
-
-  socket.on('disconnect', () => {
-    console.log('❌ User disconnected:', socket.id);
-  });
-
-  // Delete messages
-  socket.on('deleteMessage', async ({ messageId, conversationId }) => {
-    try {
-      const deletedMessage = await MessageModel.findByIdAndDelete(messageId);
-      if (deletedMessage) {
-        io.to(conversationId).emit('messageDeleted', { messageId });
-      }
-    } catch (error) {
-      console.error('❌ Lỗi khi xoá tin nhắn:', error);
-    }
-  });
-  
-});
-
-// REST API: Get messages by conversationId
-app.get('/api/messages/:conversationId', verifyOptionalToken, async (req, res) => {
-  const { conversationId } = req.params;
-  const user = req.user;  // Có thể là null nếu không có token
-
-  console.log("🔑 User đang xem:", user);
-
-  try {
-    const messages = await MessageModel.find({ conversationId }).sort({ createdAt: 1 });
-    res.json(messages);
-  } catch (error) {
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-// REST API: Get conversations
-app.get('/api/conversations', async (req, res) => {
-  try {
-    const conversations = await ConversationModel.find().sort({ lastTime: -1 });
-    res.json(conversations);
-  } catch (error) {
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-// API REST xoá tin nhắn:
-app.delete('/api/messages/:messageId', async (req, res) => {
-  const { messageId } = req.params;
-  try {
-    const deletedMessage = await MessageModel.findByIdAndDelete(messageId);
-    if (!deletedMessage) {
-      return res.status(404).json({ error: 'Message not found' });
-    }
-
-    // Gửi thông báo realtime cho những ai trong conversation đó
-    io.to(deletedMessage.conversationId).emit('messageDeleted', { messageId });
-
-    res.json({ message: 'Message deleted', messageId });
-  } catch (error) {
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-app.delete('/api/conversations/:conversationId', async (req, res) => {
-  const { conversationId } = req.params;
-  try {
-    // Xoá tất cả tin nhắn liên quan
-    await MessageModel.deleteMany({ conversationId });
-
-    // Xoá cuộc hội thoại
-    const deletedConv = await ConversationModel.findOneAndDelete({ conversationId });
-
-    if (!deletedConv) {
-      return res.status(404).json({ error: 'Conversation not found' });
-    }
-
-    // Gửi socket thông báo xoá
-    io.to(conversationId).emit('conversationDeleted', { conversationId });
-
-    res.json({ message: 'Conversation deleted', conversationId });
-  } catch (error) {
-    console.error('❌ Lỗi khi xoá cuộc hội thoại:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-
 
 
 const avatarUploadPath = path.join(__dirname, 'uploads', 'avatars');
@@ -408,21 +236,60 @@ const verifyToken = (req, res, next) => {
     return res.status(403).json({ message: 'Token không hợp lệ' });
   }
 };
-
 const isAdmin = (req, res, next) => {
-  if (req.user.role !== '1') {
+  if (req.user.role !== '1' && req.user.role !== '2') {
     return res.status(403).json({ message: 'Không có quyền truy cập' });
   }
   next();
 };
 
+const isSuperAdmin = (req, res, next) => {
+  if (req.user.role !== '2') {
+    return res.status(403).json({ message: 'Chỉ Super Admin mới có quyền này' });
+  }
+  next();
+};
+
+const canDeleteUser = (req, res, next) => {
+  const targetUserId = req.params.id;
+  
+  // Super admin có thể xóa tất cả
+  if (req.user.role === '2') {
+    return next();
+  }
+  
+  // Admin thường không thể xóa ai cả
+  return res.status(403).json({ message: 'Chỉ Super Admin mới có quyền xóa người dùng' });
+};
+
 app.use(session({
   secret: process.env.JWT_SECRET || 'your_jwt_secret_key',
   resave: false,
-  saveUninitialized: false
+  saveUninitialized: false,
+  store: MongoStore.create({ 
+    mongoUrl: MONGODB_URI,
+    collectionName: 'sessions' 
+  }),
+  cookie: {
+    maxAge: 1000 * 60 * 60 * 24 // 1 day
+  }
 }));
 app.use(passport.initialize());
 app.use(passport.session());
+
+const nodemailer = require('nodemailer');
+
+// Cấu hình transporter cho Nodemailer
+// BẠN CẦN THAY THẾ CÁC GIÁ TRỊ NÀY TRONG FILE .env
+const transporter = nodemailer.createTransport({
+  service: 'gmail', // Hoặc dịch vụ email khác
+  auth: {
+    user: process.env.EMAIL_USER, // process.env.EMAIL_USER => địa chỉ email của bạn
+    pass: process.env.EMAIL_PASS, // process.env.EMAIL_PASS => mật khẩu ứng dụng email của bạn
+  },
+});
+
+const { body, validationResult } = require('express-validator');
 
 app.post('/register', 
   body('email').isEmail().withMessage('Email không hợp lệ.'),
@@ -500,83 +367,7 @@ app.post('/register',
     res.status(500).json({ message: 'Lỗi server', error: error.message });
   }
 });
-app.post('/request-password-reset',
-  body('email').isEmail().withMessage('Email không hợp lệ.'),
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ message: errors.array()[0].msg });
-      }
 
-      const { email } = req.body;
-      const user = await User.findOne({ email: email, account_status: '1' });
-
-      if (!user) {
-        return res.status(404).json({ message: 'Không tìm thấy tài khoản hoạt động với email này.' });
-      }
-
-      const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
-      user.passwordResetToken = resetToken;
-      user.passwordResetTokenExpires = new Date(Date.now() + 10 * 60 * 1000); // Hết hạn sau 10 phút
-      await user.save();
-
-      const mailOptions = {
-        from: `"V.CLOCK" <${process.env.EMAIL_USER}>`,
-        to: user.email,
-        subject: 'Yêu cầu đặt lại mật khẩu cho tài khoản V.CLOCK',
-        html: `<p>Chào bạn,</p>
-               <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Mã OTP để đặt lại mật khẩu là:</p>
-               <h2 style="text-align:center;color:#d9534f;">${resetToken}</h2>
-               <p>Mã này sẽ hết hạn trong 10 phút. Nếu bạn không yêu cầu, vui lòng bỏ qua email này.</p>
-               <p>Trân trọng,<br/>Đội ngũ V.CLOCK</p>`,
-      };
-
-      await transporter.sendMail(mailOptions);
-
-      res.status(200).json({ message: 'Yêu cầu thành công. Vui lòng kiểm tra email để lấy mã OTP.' });
-
-    } catch (error) {
-      console.error('Request password reset error:', error);
-      res.status(500).json({ message: 'Lỗi server', error: error.message });
-    }
-});
-app.post('/reset-password',
-  body('email').isEmail().withMessage('Email không hợp lệ.'),
-  body('otp').isLength({ min: 6, max: 6 }).withMessage('Mã OTP phải có 6 chữ số.'),
-  body('newPassword').isLength({ min: 6 }).withMessage('Mật khẩu mới phải có ít nhất 6 ký tự.'),
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ message: errors.array()[0].msg });
-      }
-      
-      const { email, otp, newPassword } = req.body;
-
-      const user = await User.findOne({
-        email: email,
-        passwordResetToken: otp,
-        passwordResetTokenExpires: { $gt: Date.now() },
-      });
-
-      if (!user) {
-        return res.status(400).json({ message: 'Mã OTP không hợp lệ hoặc đã hết hạn.' });
-      }
-
-      const saltRounds = 10;
-      user.password_hash = await bcrypt.hash(newPassword, saltRounds);
-      user.passwordResetToken = null;
-      user.passwordResetTokenExpires = null;
-      await user.save();
-
-      res.status(200).json({ message: 'Mật khẩu đã được đặt lại thành công. Bạn có thể đăng nhập ngay bây giờ.' });
-
-    } catch (error) {
-      console.error('Reset password error:', error);
-    res.status(500).json({ message: 'Lỗi server', error: error.message });
-  }
-});
 app.post('/verify-email', async (req, res) => {
   try {
     const { email, otp } = req.body;
@@ -607,6 +398,7 @@ app.post('/verify-email', async (req, res) => {
     res.status(500).json({ message: 'Lỗi server', error: error.message });
   }
 });
+
 app.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -646,84 +438,6 @@ app.post('/login', async (req, res) => {
     res.status(500).json({ message: 'Lỗi server', error: error.message });
   }
 });
- app.post('/request-password-reset',
-    body('email').isEmail().withMessage('Email không hợp lệ.'),
-    async (req, res) => {
-      try {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-          return res.status(400).json({ message: errors.array()[0].msg });
-        }
-
-        const { email } = req.body;
-        const user = await User.findOne({ email: email, account_status: '1' });
-
-        if (!user) {
-          return res.status(404).json({ message: 'Không tìm thấy tài khoản hoạt động với email này.' });
-        }
-
-        const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
-        user.passwordResetToken = resetToken;
-        user.passwordResetTokenExpires = new Date(Date.now() + 10 * 60 * 1000); // Hết hạn sau 10 phút
-        await user.save();
-
-        const mailOptions = {
-          from: `"V.CLOCK" <${process.env.EMAIL_USER}>`,
-          to: user.email,
-          subject: 'Yêu cầu đặt lại mật khẩu cho tài khoản V.CLOCK',
-          html: `<p>Chào bạn,</p>
-                 <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Mã OTP để đặt lại mật khẩu là:</p>
-                 <h2 style="text-align:center;color:#d9534f;">${resetToken}</h2>
-                 <p>Mã này sẽ hết hạn trong 10 phút. Nếu bạn không yêu cầu, vui lòng bỏ qua email này.</p>
-                 <p>Trân trọng,<br/>Đội ngũ V.CLOCK</p>`,
-        };
-
-        await transporter.sendMail(mailOptions);
-
-        res.status(200).json({ message: 'Yêu cầu thành công. Vui lòng kiểm tra email để lấy mã OTP.' });
-
-      } catch (error) {
-        console.error('Request password reset error:', error);
-        res.status(500).json({ message: 'Lỗi server', error: error.message });
-      }
-  });
-
-  app.post('/reset-password',
-    body('email').isEmail().withMessage('Email không hợp lệ.'),
-    body('otp').isLength({ min: 6, max: 6 }).withMessage('Mã OTP phải có 6 chữ số.'),
-    body('newPassword').isLength({ min: 6 }).withMessage('Mật khẩu mới phải có ít nhất 6 ký tự.'),
-    async (req, res) => {
-      try {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-          return res.status(400).json({ message: errors.array()[0].msg });
-        }
-        
-        const { email, otp, newPassword } = req.body;
-
-        const user = await User.findOne({
-          email: email,
-          passwordResetToken: otp,
-          passwordResetTokenExpires: { $gt: Date.now() },
-        });
-
-        if (!user) {
-          return res.status(400).json({ message: 'Mã OTP không hợp lệ hoặc đã hết hạn.' });
-        }
-
-        const saltRounds = 10;
-        user.password_hash = await bcrypt.hash(newPassword, saltRounds);
-        user.passwordResetToken = null;
-        user.passwordResetTokenExpires = null;
-        await user.save();
-
-        res.status(200).json({ message: 'Mật khẩu đã được đặt lại thành công. Bạn có thể đăng nhập ngay bây giờ.' });
-
-      } catch (error) {
-        console.error('Reset password error:', error);
-        res.status(500).json({ message: 'Lỗi server', error: error.message });
-      }
-  });
 
 app.put('/user/profile/update', verifyToken, upload.single('avatar'), async (req, res) => {
   try {
@@ -797,18 +511,7 @@ app.get('/user/profile', verifyToken, async (req, res) => {
 });
 
 app.get("/", (req, res) => {
-  console.warn("[CẢNH BÁO] Có truy cập trực tiếp vào backend qua route '/'");
-  res.setHeader('Content-Type', 'text/html');
-  res.send(`
-    <html>
-      <head><title>API NodeJS</title></head>
-      <body style="font-family:sans-serif;text-align:center;margin-top:50px;">
-        <h2>Đây là API backend NodeJS</h2>
-        <p>Nếu bạn thấy trang này, bạn đã truy cập nhầm vào backend.<br>
-        Hãy truy cập domain chính để xem giao diện website.</p>
-      </body>
-    </html>
-  `);
+  res.send("<h2>API MOCK DEMO - Không có backend thật!</h2>");
 });
 
 app.get('/auth/google',
@@ -821,13 +524,15 @@ app.get('/auth/google/callback',
     // Tạo JWT token cho user
     const token = jwt.sign(
       { userId: req.user._id, username: req.user.username, role: req.user.role },
-      process.env.JWT_SECRET || 'your_jwt_secret_key',
+      process.env.JWT_SECRET ,
       { expiresIn: '1d' }
     );
     // Redirect về frontend kèm token
     res.redirect(`http://localhost:3005/auth/google/success?token=${token}`);
   }
-);app.get('/auth/facebook',
+);
+
+app.get('/auth/facebook',
   passport.authenticate('facebook', { scope: ['email'] })
 );
 
@@ -844,6 +549,7 @@ app.get('/auth/facebook/callback',
     res.redirect(`http://localhost:3005/auth/google/success?token=${token}`);
   }
 );
+
 // Facebook Data Deletion Callback
 app.post('/auth/facebook/delete-data', async (req, res) => {
   const signedRequest = req.body.signed_request;
@@ -883,6 +589,7 @@ app.post('/auth/facebook/delete-data', async (req, res) => {
   }
 });
 
+// Endpoint để người dùng kiểm tra trạng thái xóa (Facebook yêu cầu)
 app.get('/auth/facebook/deletion-status/:confirmation_code', (req, res) => {
     res.setHeader('Content-Type', 'text/html');
     res.send(`
@@ -897,173 +604,62 @@ app.get('/auth/facebook/deletion-status/:confirmation_code', (req, res) => {
     `);
 });
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER, // Email gửi đi
-    pass: process.env.EMAIL_PASS  // Mật khẩu ứng dụng (App Password)
-  }
-});
-app.post('/api/contact',
-    body('name').notEmpty().withMessage('Tên không được để trống.'),
-    body('email').isEmail().withMessage('Email không hợp lệ.'),
-    body('message').notEmpty().withMessage('Nội dung tin nhắn không được để trống.'),
-    async (req, res) => {
-      try {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-          return res.status(400).json({ message: errors.array()[0].msg });
-        }
-
-        const { name, email, phone, company, message } = req.body;
-
-        // Gửi email đến admin
-        const adminMailOptions = {
-          from: `"V.CLOCK Contact Form" <${process.env.EMAIL_USER}>`,
-          to: process.env.EMAIL_USER, // Email admin
-          subject: 'Tin nhắn liên hệ mới từ V.CLOCK',
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #d9534f; border-bottom: 2px solid #d9534f; padding-bottom: 10px;">
-                Tin Nhắn Liên Hệ Mới
-              </h2>
-              
-              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #333; margin-top: 0;">Thông Tin Người Gửi:</h3>
-                <p><strong>Họ và Tên:</strong> ${name}</p>
-                <p><strong>Email:</strong> ${email}</p>
-                ${phone ? `<p><strong>Số Điện Thoại:</strong> ${phone}</p>` : ''}
-                ${company ? `<p><strong>Công Ty:</strong> ${company}</p>` : ''}
-              </div>
-
-              <div style="background-color: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-                <h3 style="color: #333; margin-top: 0;">Nội Dung Tin Nhắn:</h3>
-                <p style="line-height: 1.6; white-space: pre-wrap;">${message}</p>
-              </div>
-
-              <div style="margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 8px;">
-                <p style="margin: 0; color: #666; font-size: 14px;">
-                  <strong>Thời gian:</strong> ${new Date().toLocaleString('vi-VN')}<br>
-                  <strong>IP:</strong> ${req.ip}<br>
-                  <strong>User Agent:</strong> ${req.get('User-Agent')}
-                </p>
-              </div>
-            </div>
-          `,
-        };
-
-        // Gửi email xác nhận cho khách hàng
-        const customerMailOptions = {
-          from: `"V.CLOCK" <${process.env.EMAIL_USER}>`,
-          to: email,
-          subject: 'Xác nhận tin nhắn liên hệ - V.CLOCK',
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #d9534f; border-bottom: 2px solid #d9534f; padding-bottom: 10px;">
-                Xác Nhận Tin Nhắn Liên Hệ
-              </h2>
-              
-              <p>Chào <strong>${name}</strong>,</p>
-              
-              <p>Cảm ơn bạn đã liên hệ với V.CLOCK. Chúng tôi đã nhận được tin nhắn của bạn và sẽ phản hồi trong thời gian sớm nhất.</p>
-              
-              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="color: #333; margin-top: 0;">Thông Tin Tin Nhắn:</h3>
-                <p><strong>Thời gian gửi:</strong> ${new Date().toLocaleString('vi-VN')}</p>
-                <p><strong>Nội dung:</strong></p>
-                <div style="background-color: #fff; padding: 15px; border: 1px solid #ddd; border-radius: 5px; margin-top: 10px;">
-                  <p style="line-height: 1.6; white-space: pre-wrap; margin: 0;">${message}</p>
-                </div>
-              </div>
-
-              <p>Nếu bạn có bất kỳ câu hỏi nào khác, vui lòng liên hệ với chúng tôi qua:</p>
-              <ul>
-                <li>Email: contact@vclock.vn</li>
-                <li>Điện thoại: 0909 123 456</li>
-                <li>Địa chỉ: 1073/23 Cách Mạng Tháng 8, Phường 7, Quận Tân Bình, TP. Hồ Chí Minh</li>
-              </ul>
-
-              <p style="margin-top: 30px; color: #666; font-size: 14px;">
-                Trân trọng,<br>
-                <strong>Đội ngũ V.CLOCK</strong>
-              </p>
-            </div>
-          `,
-        };
-
-        // Gửi cả hai email
-        await Promise.all([
-          transporter.sendMail(adminMailOptions),
-          transporter.sendMail(customerMailOptions)
-        ]);
-
-        res.status(200).json({ 
-          message: 'Tin nhắn của bạn đã được gửi thành công! Chúng tôi sẽ liên hệ lại sớm.',
-          success: true 
-        });
-
-      } catch (error) {
-        console.error('Contact form error:', error);
-        res.status(500).json({ 
-          message: 'Có lỗi xảy ra khi gửi tin nhắn. Vui lòng thử lại sau.',
-          error: error.message 
-        });
-      }
-  });
-
-
-
-// thanh toán onl
-const client_id = process.env.client_id;
-const api_key = process.env.api_key;
-const checksum_key = process.env.checksum_key;
-
-const PayOS = require('@payos/node');
-
-const payos = new PayOS(client_id,api_key,checksum_key);
-app.use(exp.static('public'));
-app.use(exp.json());
-
-const YOUR_DOMAIN = "http://localhost:3005";
-
-app.post("/create-payment-link", async (req, res) => {
-  try {
-    const { amount, description, orderCode } = req.body;
-
-    const order = {
-      amount,
-      description,
-      orderCode,
-      returnUrl: `${YOUR_DOMAIN}/checkout-success`,
-      cancelUrl: `${YOUR_DOMAIN}/checkout-cancel`,
-    };
-
-    const paymentLink = await payos.createPaymentLink(order);
-
-    res.json({ checkoutUrl: paymentLink.checkoutUrl });
-  } catch (err) {
-    console.error("Lỗi tạo payment link:", err);
-    res.status(500).json({ success: false, message: "Lỗi tạo link thanh toán" });
-  }
-});
-
-
-
 // http://localhost:3000/api/sp
-app.get('/api/sp/:limit?/:page?', async function(req, res) {    
+app.get('/api/sp', async function(req, res) {    
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
+  const limit = parseInt(req.query.limit) || 12;
   const skip = (page - 1) * limit;
 
+  const { category: categoryName, brand: brandName, price_max, sort } = req.query;
+
   try {
-    const total = await ProductModel.countDocuments();
-    const products = await ProductModel.find()
+    let query = {};
+    let productIds = [];
+
+    // Lọc theo danh mục
+    if (categoryName && categoryName !== 'Tất cả') {
+      const category = await CategoryModel.findOne({ name: categoryName });
+      if (category) {
+        const productCategories = await ProductCategoriesModel.find({ category_id: category._id });
+        productIds = productCategories.map(pc => pc.product_id);
+        query._id = { $in: productIds };
+      } else {
+        // Nếu không tìm thấy category, trả về mảng rỗng
+        return res.json({ list: [], total: 0 });
+      }
+    }
+
+    // Lọc theo thương hiệu
+    if (brandName) {
+      const brand = await BrandModel.findOne({ name: brandName });
+      if (brand) {
+        query.brand_id = brand._id;
+      } else {
+        // Nếu không tìm thấy brand, trả về mảng rỗng
+        return res.json({ list: [], total: 0 });
+      }
+    }
+
+    // Lọc theo giá
+    if (price_max && !isNaN(Number(price_max))) {
+      query.price = { $lte: Number(price_max) };
+    }
+
+    // Sắp xếp
+    let sortOption = { created_at: -1 };
+    if (sort) {
+      if (sort === 'price-asc') sortOption = { price: 1 };
+      if (sort === 'price-desc') sortOption = { price: -1 };
+    }
+
+    const total = await ProductModel.countDocuments(query);
+    const products = await ProductModel.find(query)
       .populate({
         path: "brand_id",
         model: "brands",
         select: "name",
       })
-      .sort({ created_at: -1 })
+      .sort(sortOption)
       .skip(skip)
       .limit(limit);
 
@@ -1105,265 +701,21 @@ app.get('/api/sp/:limit?/:page?', async function(req, res) {
       );
       
 
-    res.json({ list, total });
+    res.json({ list, total, totalPages: Math.ceil(total / limit) });
   } catch (error) {
     console.error("Lỗi khi truy vấn MongoDB:", error);
     res.status(500).json({ error: "Lỗi khi lấy danh sách sản phẩm." });
   }
-  });
-app.get('/api/sp_filter', async (req, res) => {
-  const { category, brand, minPrice, maxPrice, sort, page = 1, limit = 12 } = req.query;
-  let filter = {};
-
-  try {
-    if (category && category !== 'Tất cả') {
-      const categoryObj = await CategoryModel.findOne({ name: category });
-      if (categoryObj) {
-        const productCategories = await ProductCategoriesModel.find({ category_id: categoryObj._id });
-        const productIds = productCategories.map(pc => new mongoose.Types.ObjectId(pc.product_id));
-        filter._id = { $in: productIds };
-      } else {
-        return res.json({ products: [], total: 0, totalPages: 0, currentPage: 1 });
-      }
-    }
-
-    // Filter theo brand
-    if (brand) {
-      const brandObj = await BrandModel.findOne({ name: brand });
-      if (brandObj) {
-        filter.brand_id = brandObj._id;
-      } else {
-        return res.json({ products: [], total: 0, totalPages: 0, currentPage: 1 });
-      }
-    }
-
-    // Lọc theo giá - sử dụng logic phức tạp hơn để xử lý cả price và sale_price
-    if (minPrice || maxPrice) {
-      const minPriceNum = minPrice ? Number(minPrice) : 0;
-      const maxPriceNum = maxPrice ? Number(maxPrice) : Number.MAX_SAFE_INTEGER;
-      
-      // Tạo điều kiện phức tạp: sử dụng sale_price nếu có và > 0, ngược lại sử dụng price
-      filter.$or = [
-        // Trường hợp 1: sale_price > 0 và nằm trong khoảng giá
-        {
-          $and: [
-            { sale_price: { $gt: 0 } },
-            { sale_price: { $gte: minPriceNum, $lte: maxPriceNum } }
-          ]
-        },
-        // Trường hợp 2: sale_price = 0 hoặc null, sử dụng price và nằm trong khoảng giá
-        {
-          $and: [
-            { $or: [{ sale_price: 0 }, { sale_price: null }] },
-            { price: { $gte: minPriceNum, $lte: maxPriceNum } }
-          ]
-        }
-      ];
-    }
-    
-    let sortOption = {};
-    if (sort === 'price-asc') {
-      // Sắp xếp theo giá tăng dần: ưu tiên sale_price nếu có, ngược lại dùng price
-      sortOption = {
-        $addFields: {
-          sortPrice: {
-            $cond: {
-              if: { $gt: ['$sale_price', 0] },
-              then: '$sale_price',
-              else: '$price'
-            }
-          }
-        }
-      };
-    } else if (sort === 'price-desc') {
-      // Sắp xếp theo giá giảm dần: ưu tiên sale_price nếu có, ngược lại dùng price
-      sortOption = {
-        $addFields: {
-          sortPrice: {
-            $cond: {
-              if: { $gt: ['$sale_price', 0] },
-              then: '$sale_price',
-              else: '$price'
-            }
-          }
-        }
-      };
-    } else {
-      sortOption = { _id: 1 };
-    }
-
-    const pageNum = Math.max(parseInt(page), 1);
-    const limitNum = Math.max(parseInt(limit), 1);
-    const skip = (pageNum - 1) * limitNum;
-
-    const total = await ProductModel.countDocuments(filter);
-let aggregationPipeline = [
-      { $match: filter },
-      {
-        $lookup: {
-          from: 'product_images',
-          let: { productId: '$_id' },
-          pipeline: [
-            { $match: { $expr: { $and: [
-              { $eq: ['$product_id', '$$productId'] },
-              { $eq: ['$is_main', true] }
-            ] } } },
-            { $project: { image: 1, alt: 1, _id: 1 } }
-          ],
-          as: 'main_image'
-        }
-      },
-      {
-        $lookup: {
-          from: 'brands',
-          localField: 'brand_id',
-          foreignField: '_id',
-          as: 'brand'
-        }
-      },
-      { $unwind: '$brand' },
-      { $match: { 'brand.brand_status': 0 } }, // Chỉ lấy sản phẩm của thương hiệu đang hoạt động
-      { $addFields: { main_image: { $arrayElemAt: ['$main_image', 0] } } }
-    ];
-
-    // Thêm logic sắp xếp
-    if (sort === 'price-asc' || sort === 'price-desc') {
-      aggregationPipeline.push({
-        $addFields: {
-          sortPrice: {
-            $cond: {
-              if: { $gt: ['$sale_price', 0] },
-              then: '$sale_price',
-              else: '$price'
-            }
-          }
-        }
-      });
-      aggregationPipeline.push({ $sort: { sortPrice: sort === 'price-asc' ? 1 : -1 } });
-    } else {
-      aggregationPipeline.push({ $sort: { _id: 1 } });
-    }
-
-    aggregationPipeline.push({ $skip: skip });
-    aggregationPipeline.push({ $limit: limitNum });
-    aggregationPipeline.push({
-      $project: {
-        _id: 1,
-        name: 1,
-        description: 1,
-        price: 1,
-        sale_price: 1,
-        status: 1,
-        quantity: 1,
-        views: 1,
-        sex: 1,
-        case_diameter: 1,
-        style: 1,
-        features: 1,
-        water_resistance: 1,
-        thickness: 1,
-        color: 1,
-        machine_type: 1,
-        strap_material: 1,
-        case_material: 1,
-        created_at: 1,
-        updated_at: 1,
-        main_image: {
-          _id: 1,
-          image: 1,
-          alt: 1
-        },
-        brand: {
-          _id: 1,
-          name: 1
-        }
-      }
-    });
-
-    const products = await ProductModel.aggregate(aggregationPipeline);
-    
-    res.json({
-      products,
-      total,
-      totalPages: Math.ceil(total / limitNum),
-      currentPage: pageNum
-    });
-  } catch (err) {
-    console.error('Lỗi lọc sản phẩm:', err);
-    res.status(500).json({ error: 'Lỗi lọc sản phẩm', details: err });
-  }
 });
 
 // http://localhost:3000/api/sp_moi
-app.get('/api/sp_moi', async (req, res) => {
-  const limit = parseInt(req.query.limit, 10) || 10;
-
-  try {
-    const products = await ProductModel.aggregate([
-      {
-        $lookup: {
-          from: 'product_images',
-          let: { productId: '$_id' },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ['$product_id', '$$productId'] },
-                    { $eq: ['$is_main', true] }
-                  ]
-                }
-              }
-            },
-            {
-              $project: {
-                image: 1,
-                alt: 1,
-                _id: 1
-              }
-            }
-          ],
-          as: 'main_image'
-        }
-      },
-      {$lookup: {
-        from: 'brands',
-        localField: 'brand_id',
-        foreignField: '_id',
-        as: 'brand'
-        }
-      },
-      { $unwind: '$brand' },
-      { $match: { 'brand.brand_status': 0 } }, // Chỉ lấy sản phẩm của thương hiệu đang hoạt động
-      { $sort: { createdAt: -1 } },
-      { $addFields: { main_image: { $arrayElemAt: ['$main_image', 0] } } },
-      { $limit: limit },
-      // ✅ Project chỉ các trường cần thiết
-    {
-      $project: {
-        name: 1,
-        price: 1,
-        sale_price: 1,
-        createdAt: 1,
-        views: 1,
-        quantity: 1,
-        main_image: {
-          _id: 1,
-          image: 1,
-          alt: 1
-        },
-        brand: {
-          _id: 1,
-          name: 1
-        },
-      }
-    }
-    ]);
-
-    res.json(products);
-  } catch (err) {
-    res.status(500).json({ error: 'Lỗi lấy sản phẩm', details: err });
-  }
+app.get('/api/sp_moi', (req, res) => {
+  res.json([
+    { _id: '1', name: 'Đồng hồ demo 1', price: 1000000, sale_price: 900000, main_image: { image: '/sp1.png', alt: 'sp1' }, brand: { _id: 'b1', name: 'Brand A' }, quantity: 10, views: 100 },
+    { _id: '2', name: 'Đồng hồ demo 2', price: 2000000, sale_price: 0, main_image: { image: '/sp2.png', alt: 'sp2' }, brand: { _id: 'b2', name: 'Brand B' }, quantity: 5, views: 50 },
+    { _id: '3', name: 'Đồng hồ demo 3', price: 1500000, sale_price: 1200000, main_image: { image: '/sp3.png', alt: 'sp3' }, brand: { _id: 'b3', name: 'Brand C' }, quantity: 8, views: 80 },
+    { _id: '4', name: 'Đồng hồ demo 4', price: 2500000, sale_price: 0, main_image: { image: '/sp4.png', alt: 'sp4' }, brand: { _id: 'b4', name: 'Brand D' }, quantity: 3, views: 30 }
+  ]);
 });
 
 // http://localhost:3000/api/sp_giam_gia
@@ -1419,7 +771,6 @@ try {
       $project: {
         name: 1,
         price: 1,
-        sale_price: 1,
         createdAt: 1,
         views: 1,
         quantity: 1,
@@ -1533,33 +884,13 @@ app.get('/api/sp_lien_quan/:id', async (req, res) => {
 });
 
 // http://localhost:3000/api/brand
-app.get('/api/brand', async function (req, res) {
-  try {
-    const brandsWithProductCount = await BrandModel.aggregate([
-      {
-        $lookup: {
-          from: 'products',
-          localField: '_id',
-          foreignField: 'brand_id',
-          as: 'products'
-        }
-      },
-      {
-        $addFields: {
-          productCount: { $size: '$products' }
-        }
-      },
-      {
-        $project: {
-          products: 0
-        }
-      }
-    ]);
-
-    res.json(brandsWithProductCount);
-  } catch (err) {
-    res.status(500).json({ error: 'Lỗi lấy danh sách thương hiệu', details: err.message });
-  }
+app.get('/api/brand', (req, res) => {
+  res.json([
+    { _id: 'b1', name: 'Brand A', productCount: 2 },
+    { _id: 'b2', name: 'Brand B', productCount: 1 },
+    { _id: 'b3', name: 'Brand C', productCount: 1 },
+    { _id: 'b4', name: 'Brand D', productCount: 1 }
+  ]);
 });
 
 // http://localhost:3000/api/brand/6831eb9c5c1a8be3463e4603
@@ -1612,6 +943,15 @@ app.get('/api/brand/:id/products', async function(req, res) {
     catch (err) {
       res.status(500).json({ error: 'Lỗi lấy sản phẩm theo thương hiệu', details: err });
     }
+});
+
+// http://localhost:3000/api/products/top-rated
+app.get('/api/products/top-rated', (req, res) => {
+  res.json([
+    { _id: '1', name: 'Đồng hồ demo 1', price: 1000000, sale_price: 900000, main_image: { image: '/sp1.png', alt: 'sp1' }, brand: { _id: 'b1', name: 'Brand A' }, averageRating: 4.5, reviewCount: 10 },
+    { _id: '2', name: 'Đồng hồ demo 2', price: 2000000, sale_price: 0, main_image: { image: '/sp2.png', alt: 'sp2' }, brand: { _id: 'b2', name: 'Brand B' }, averageRating: 4.0, reviewCount: 5 },
+    { _id: '3', name: 'Đồng hồ demo 3', price: 1500000, sale_price: 1200000, main_image: { image: '/sp3.png', alt: 'sp3' }, brand: { _id: 'b3', name: 'Brand C' }, averageRating: 4.2, reviewCount: 7 }
+  ]);
 });
 
 // http://localhost:3000/api/user/6655d0000000000000000002
@@ -1742,136 +1082,155 @@ app.get('/api/product/:id', async (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
     }
 
-    // Tạo slug từ tên sản phẩm (không cần lưu DB)
-    const productData = product[0];
-    const slug = slugify(productData.name, { lower: true, locale: 'vi' });
-
     // Tăng views
     await ProductModel.updateOne({ _id: objectId }, { $inc: { views: 1 } });
 
-    res.json({
-      ...productData,
-      slug: `${slug}-${productData._id}`,
-    });    
+    res.json(product[0]);
   } catch (err) {
     res.status(500).json({ error: 'Lỗi máy chủ', details: err.message });
   }
 });
 
-// http://localhost:3000/api/products/top-rated?limit=6
-app.get('/api/products/top-rated', async function(req, res) {
-    const limit = parseInt(req.query.limit) || 6;
-    
-    try {
-      const topRatedProducts = await ProductModel.aggregate([
-        {
-          $lookup: {
-            from: 'order_details',
-            localField: '_id',
-            foreignField: 'product_id',
-            as: 'order_details'
-          }
-        },
-        {
-          $lookup: {
-            from: 'reviews',
-            let: { orderDetailIds: '$order_details._id' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: { $in: ['$order_detail_id', '$$orderDetailIds'] }
-                }
-              }
-            ],
-            as: 'reviews'
-          }
-        },
-        {
-          $addFields: {
-            averageRating: {
-              $cond: {
-                if: { $gt: [{ $size: '$reviews' }, 0] },
-                then: { $avg: '$reviews.rating' },
-                else: 0
-              }
-            },
-            reviewCount: { $size: '$reviews' }
-          }
-        },
-        {
-          $lookup: {
-            from: 'product_images',
-            let: { productId: '$_id' },
-            pipeline: [
-              { $match: { $expr: { $and: [
-                { $eq: ['$product_id', '$$productId'] },
-                { $eq: ['$is_main', true] }
-              ] } } },
-              { $project: { image: 1, alt: 1, _id: 0 } }
-            ],
-            as: 'main_image'
-          }
-        },
-        {
-          $addFields: {
-            main_image: { $arrayElemAt: ['$main_image', 0] }
-          }
-        },
-        {
-          $lookup: {
-            from: 'brands',
-            localField: 'brand_id',
-            foreignField: '_id',
-            as: 'brand'
-          }
-        },
-        { $unwind: '$brand' },
-        {
-          $match: {
-            'brand.brand_status': 0,
-            status: 0,
-            quantity: { $gt: 0 }
-          }
-        },
-        {
-          $sort: { averageRating: -1, reviewCount: -1 }
-        },
-        { $limit: limit },
-        {
-          $project: {
-            _id: 1,
-            name: 1,
-            price: 1,
-            sale_price: 1,
-            averageRating: { $round: ['$averageRating', 1] },
-            reviewCount: 1,
-            main_image: 1,
-            brand: {
-              _id: 1,
-              name: 1
-            }
-          }
-        }
-      ]);
-  
-      res.json(topRatedProducts);
-    }
-    catch (err) {
-      res.status(500).json({ error: 'Lỗi lấy sản phẩm được đánh giá cao', details: err });
-    }
-});
-
 // API lấy danh mục sản phẩm
 app.get('/api/category', async (req, res) => {
   try {
-    const categories = await CategoryModel.find({ category_status: 0 }); // Chỉ lấy danh mục đang hoạt động
+    const categories = await CategoryModel.find({});
     res.json(categories);
   } catch (err) {
     res.status(500).json({ error: 'Lỗi lấy danh mục', details: err });
   }
 });
 
+// http://localhost:3000/api/sp_filter?category=684bd33394fc9ce76cf76edd&minPrice=1000000sort=price-asc&page=1&limit=12
+app.get('/api/sp_filter', async (req, res) => {
+  const { category, minPrice, maxPrice, sort, page = 1, limit = 12 } = req.query;
+  let filter = {};
 
+  try {
+    if (category && category !== 'Tất cả') {
+      const categoryObj = await CategoryModel.findOne({ name: category });
+      if (categoryObj) {
+        const productCategories = await ProductCategoriesModel.find({ category_id: categoryObj._id });
+        const productIds = productCategories.map(pc => new mongoose.Types.ObjectId(pc.product_id));
+        filter._id = { $in: productIds };
+      } else {
+        return res.json({ products: [], total: 0, totalPages: 0, currentPage: 1 });
+      }
+    }
+
+    // Lọc theo giá - sử dụng logic phức tạp hơn để xử lý cả price và sale_price
+    if (minPrice || maxPrice) {
+      const minPriceNum = minPrice ? Number(minPrice) : 0;
+      const maxPriceNum = maxPrice ? Number(maxPrice) : Number.MAX_SAFE_INTEGER;
+      
+      // Tạo điều kiện phức tạp: sử dụng sale_price nếu có và > 0, ngược lại sử dụng price
+      filter.$or = [
+        // Trường hợp 1: sale_price > 0 và nằm trong khoảng giá
+        {
+          $and: [
+            { sale_price: { $gt: 0 } },
+            { sale_price: { $gte: minPriceNum, $lte: maxPriceNum } }
+          ]
+        },
+        // Trường hợp 2: sale_price = 0 hoặc null, sử dụng price và nằm trong khoảng giá
+        {
+          $and: [
+            { $or: [{ sale_price: 0 }, { sale_price: null }] },
+            { price: { $gte: minPriceNum, $lte: maxPriceNum } }
+          ]
+        }
+      ];
+    }
+    
+    let sortOption = {};
+    if (sort === 'price-asc') {
+      // Sắp xếp theo giá tăng dần: ưu tiên sale_price nếu có, ngược lại dùng price
+      sortOption = {
+        $addFields: {
+          sortPrice: {
+            $cond: {
+              if: { $gt: ['$sale_price', 0] },
+              then: '$sale_price',
+              else: '$price'
+            }
+          }
+        }
+      };
+    } else if (sort === 'price-desc') {
+      // Sắp xếp theo giá giảm dần: ưu tiên sale_price nếu có, ngược lại dùng price
+      sortOption = {
+        $addFields: {
+          sortPrice: {
+            $cond: {
+              if: { $gt: ['$sale_price', 0] },
+              then: '$sale_price',
+              else: '$price'
+            }
+          }
+        }
+      };
+    } else {
+      sortOption = { _id: 1 };
+    }
+
+    const pageNum = Math.max(parseInt(page), 1);
+    const limitNum = Math.max(parseInt(limit), 1);
+    const skip = (pageNum - 1) * limitNum;
+
+    const total = await ProductModel.countDocuments(filter);
+let aggregationPipeline = [
+      { $match: filter },
+      {
+        $lookup: {
+          from: 'product_images',
+          let: { productId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $and: [
+              { $eq: ['$product_id', '$$productId'] },
+              { $eq: ['$is_main', true] }
+            ] } } },
+            { $project: { image: 1, _id: 0 } }
+          ],
+          as: 'mainImage'
+        }
+      },
+      { $addFields: { mainImage: { $arrayElemAt: ['$mainImage.image', 0] } } }
+    ];
+
+    // Thêm logic sắp xếp
+    if (sort === 'price-asc' || sort === 'price-desc') {
+      aggregationPipeline.push({
+        $addFields: {
+          sortPrice: {
+            $cond: {
+              if: { $gt: ['$sale_price', 0] },
+              then: '$sale_price',
+              else: '$price'
+            }
+          }
+        }
+      });
+      aggregationPipeline.push({ $sort: { sortPrice: sort === 'price-asc' ? 1 : -1 } });
+    } else {
+      aggregationPipeline.push({ $sort: { _id: 1 } });
+    }
+
+    aggregationPipeline.push({ $skip: skip });
+    aggregationPipeline.push({ $limit: limitNum });
+
+    const products = await ProductModel.aggregate(aggregationPipeline);
+    
+    res.json({
+      products,
+      total,
+      totalPages: Math.ceil(total / limitNum),
+      currentPage: pageNum
+    });
+  } catch (err) {
+    console.error('Lỗi lọc sản phẩm:', err);
+    res.status(500).json({ error: 'Lỗi lọc sản phẩm', details: err });
+  }
+});
 
 
 // http://localhost:3000/api/reviews/6833ff0acc1ed305e8513aae
@@ -2054,32 +1413,6 @@ app.get('/user/addresses', verifyToken, async (req, res) => {
 });
 
 
-app.post('/checkout/addresses', verifyOptionalToken, async (req, res) => {
-  try {
-    const { receiver_name, phone, address } = req.body;
-    const userId = req.user?.userId || null;  // Có thể là null nếu là khách
-
-    if (!receiver_name || !phone || !address) {
-      return res.status(400).json({ message: 'Vui lòng điền đầy đủ thông tin' });
-    }
-
-    const newAddress = new AddressModel({
-      user_id: userId,  // Cho phép null
-      receiver_name,
-      phone,
-      address,
-      created_at: new Date(),
-      updated_at: new Date()
-    });
-
-    const savedAddress = await newAddress.save();
-    return res.status(201).json({ success: true, address: savedAddress });
-
-  } catch (error) {
-    res.status(500).json({ message: 'Lỗi server', error: error.message });
-  }
-});
-
 app.post('/user/addresses', verifyToken, async (req, res) => {
   try {
     const { receiver_name, phone, address } = req.body;
@@ -2155,51 +1488,16 @@ app.delete('/user/addresses/:id', verifyToken, async (req, res) => {
 });
 
 
-app.get('/api/news', async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-
-    const news = await NewsModel.aggregate([
-      {
-        $lookup: {
-          from: 'category_news',
-          localField: 'categorynews_id',
-          foreignField: '_id',
-          as: 'category'
-        }
-      },
-      { $unwind: '$category' },
-      {
-        $project: {
-          _id: 1,
-          title: 1,
-          content: 1,
-          image: 1,
-          news_status: 1,
-          views: 1,
-          created_at: 1,
-          updated_at: 1,
-          'category.name': 1
-        }
-      },
-      { $sort: { created_at: -1 } },
-      { $skip: skip },
-      { $limit: limit }
-    ]);
-
-    const total = await NewsModel.countDocuments();
-
-    res.json({
-      news,
-      currentPage: page,
-      totalPages: Math.ceil(total / limit),
-      totalNews: total
-    });
-  } catch (err) {
-    res.status(500).json({ error: 'Lỗi lấy danh sách tin tức', details: err.message });
-  }
+app.get('/api/news', (req, res) => {
+  res.json({
+    news: [
+      { _id: 'n1', title: 'Tin demo 1', content: 'Nội dung tin demo 1', image: '/news1.jpg', news_status: 1, views: 100, created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z', category: { name: 'Khuyến mãi' } },
+      { _id: 'n2', title: 'Tin demo 2', content: 'Nội dung tin demo 2', image: '/news2.jpg', news_status: 1, views: 50, created_at: '2024-01-02T00:00:00Z', updated_at: '2024-01-02T00:00:00Z', category: { name: 'Sự kiện' } }
+    ],
+    currentPage: 1,
+    totalPages: 1,
+    totalNews: 2
+  });
 });
 
 app.get('/api/news/:id', async (req, res) => {
@@ -2235,142 +1533,18 @@ app.get('/api/news/:id', async (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy tin tức' });
     }
 
-    // Increment views
-    await NewsModel.updateOne({ _id: newsId }, { $inc: { views: 1 } });
-
     res.json(news[0]);
   } catch (err) {
     res.status(500).json({ error: 'Lỗi lấy tin tức', details: err.message });
   }
 });
-  app.get('/api/search/suggestions', async (req, res) => {
-    try {
-      const { q } = req.query;
-      if (!q || q.length < 2) {
-        return res.json({ suggestions: [] });
-      }
-      const products = await ProductModel.find({
-        $or: [
-          { name: { $regex: q, $options: 'i' } },
-          { brand: { $regex: q, $options: 'i' } },
-          { category: { $regex: q, $options: 'i' } }
-        ]
-      }).limit(5);
 
-      // Tìm kiếm trong brands
-      const brands = await BrandModel.find({
-        name: { $regex: q, $options: 'i' }
-      }).limit(3);
-
-      // Tìm kiếm trong categories
-      const categories = await CategoryModel.find({
-        name: { $regex: q, $options: 'i' }
-      }).limit(3);
-
-      const suggestions = [
-        ...products.map(p => ({ name: p.name, type: 'product' })),
-        ...brands.map(b => ({ name: b.name, type: 'brand' })),
-        ...categories.map(c => ({ name: c.name, type: 'category' }))
-      ];
-
-      res.json({ suggestions });
-    } catch (error) {
-      console.error('Search suggestions error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  });
-
-
- app.get('/api/category-news', async (req, res) => {
-  try {
-    const categories = await CategoryNewsModel.find({ status: 0 }) // Chỉ lấy danh mục đang hoạt động
-      .sort({ created_at: -1 });
-    res.json(categories);
-  } catch (err) {
-    res.status(500).json({ error: 'Lỗi lấy danh mục tin tức', details: err });
-  }
-});
-  app.get('/api/search', async (req, res) => {
-    try {
-      const { q, brand, category, priceRange, sortBy } = req.query;
-      
-      let query = {};
-      
-      // Tìm kiếm theo từ khóa
-      if (q) {
-        query.$or = [
-          { name: { $regex: q, $options: 'i' } },
-          { description: { $regex: q, $options: 'i' } },
-          { brand: { $regex: q, $options: 'i' } },
-          { category: { $regex: q, $options: 'i' } }
-        ];
-      }
-
-      // Filter theo brand
-      if (brand) {
-        query.brand = { $regex: brand, $options: 'i' };
-      }
-
-      // Filter theo category
-      if (category) {
-        query.category = { $regex: category, $options: 'i' };
-      }
-
-      // Filter theo price range
-      if (priceRange) {
-        const [min, max] = priceRange.split('-');
-        if (max === '+') {
-          query.price = { $gte: parseInt(min) };
-        } else {
-          query.price = { $gte: parseInt(min), $lte: parseInt(max) };
-        }
-      }
-
-      // Sort options
-      let sort = {};
-      switch (sortBy) {
-        case 'price-asc':
-          sort = { price: 1 };
-          break;
-        case 'price-desc':
-          sort = { price: -1 };
-          break;
-        case 'name-asc':
-          sort = { name: 1 };
-          break;
-        default:
-          sort = { createdAt: -1 };
-      }
-
-      const products = await ProductModel.find(query)
-        .sort(sort)
-        .limit(50)
-        .lean(); // Sử dụng lean() để tối ưu performance
-
-      // Lấy ảnh cho từng sản phẩm
-      const productsWithImages = await Promise.all(
-        products.map(async (product) => {
-          const images = await ProductImageModel.find({ 
-            product_id: product._id 
-          }).sort({ is_main: -1 }).lean(); // Sắp xếp ảnh chính lên đầu
-          
-          return {
-            ...product,
-            images: images.map(img => img.image)
-          };
-        })
-      );
-
-      res.json({ products: productsWithImages });
-    } catch (error) {
-      console.error('Search error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  });
+// API tăng lượt xem tin tức
 app.post('/api/news/:id/increment-view', async (req, res) => {
   try {
     const newsId = new ObjectId(req.params.id);
-  
+    
+    // Tăng lượt xem
     const result = await NewsModel.findByIdAndUpdate(
       newsId,
       { $inc: { views: 1 } },
@@ -2389,6 +1563,7 @@ app.post('/api/news/:id/increment-view', async (req, res) => {
     res.status(500).json({ error: 'Lỗi tăng lượt xem', details: err.message });
   }
 });
+
 app.get('/api/news/category/:categoryId', async (req, res) => {
   try {
     const categoryId = new ObjectId(req.params.categoryId);
@@ -2437,6 +1612,7 @@ app.get('/api/news/category/:categoryId', async (req, res) => {
     res.status(500).json({ error: 'Lỗi lấy tin tức theo danh mục', details: err.message });
   }
 });
+
 app.get('/user/wishlist', verifyToken, async (req, res) => {
   try {
       const userId = req.user.userId;
@@ -2534,11 +1710,77 @@ app.delete('/user/wishlist/:productId', verifyToken, async (req, res) => {
     }
 });
 
+// http://localhost:3000/api/check
+app.post('/api/check', async (req, res) => {
+  const { voucher_code, user_id, order_total } = req.body;
+
+  if (!voucher_code || !order_total) {
+    return res.status(400).json({ message: "Thiếu thông tin yêu cầu" });
+  }
+
+  try {
+    const voucher = await VoucherModel.findOne({ voucher_code: voucher_code.trim() });
+
+    if (!voucher) {
+      return res.status(404).json({ message: "Mã voucher không tồn tại" });
+    }
+
+    const now = new Date();
+    if (voucher.start_date > now || voucher.end_date < now) {
+      return res.status(400).json({ message: "Voucher đã hết hạn hoặc chưa có hiệu lực" });
+    }
+
+    // Kiểm tra đã dùng chưa nếu có user_id
+    if (user_id) {
+      const existedOrder = await OrderModel.findOne({
+        user_id: new mongoose.Types.ObjectId(user_id),
+        voucher_id: voucher._id,
+        order_status: { $ne: "cancelled" },
+      });
+
+      if (existedOrder) {
+        return res.status(400).json({ message: "Bạn đã sử dụng voucher này rồi" });
+      }
+    }
+
+    if (order_total < voucher.minimum_order_value) {
+      return res.status(400).json({
+        message: `Đơn hàng phải đạt tối thiểu ${voucher.minimum_order_value.toLocaleString()}₫ để áp dụng voucher này.`,
+      });
+    }
+
+    let discountAmount = 0;
+    if (voucher.discount_type === "percentage") {
+      discountAmount = (order_total * voucher.discount_value) / 100;
+    } else if (voucher.discount_type === "fixed") {
+      discountAmount = voucher.discount_value;
+    }
+
+    if (voucher.max_discount && discountAmount > voucher.max_discount) {
+      discountAmount = voucher.max_discount;
+    }
+
+    return res.status(200).json({
+      message: "Voucher hợp lệ",
+      data: {
+        voucher_id: voucher._id,
+        discount_amount: discountAmount,
+        discount_type: voucher.discount_type,
+        discount_value: voucher.discount_value,
+      },
+    });
+  } catch (err) {
+    console.error("Lỗi kiểm tra voucher:", err);
+    return res.status(500).json({ message: "Lỗi server" });
+  }
+});
+
 // http://localhost:3000/api/checkout
-app.post("/api/checkout", verifyOptionalToken, async (req, res) => {
+app.post("/api/checkout", async (req, res) => {
   try {
     const {
       cart,
+      user_id,
       address_id,
       new_address,
       payment_method_id,
@@ -2547,8 +1789,6 @@ app.post("/api/checkout", verifyOptionalToken, async (req, res) => {
       note,
       total_amount
     } = req.body;
-
-    const user_id = req.user?.userId || null;  // Đổi thành user_id để khớp bên dưới
 
     if (!cart || cart.length === 0) {
       return res.status(400).json({ message: "Giỏ hàng không được để trống." });
@@ -2721,6 +1961,8 @@ app.put("/api/cancel-order/:order_id", async (req, res) => {
   }
 });
 
+
+
 // http://localhost:3000/api/reviews/user/6852bc7cdbb9b28715884c6f
 app.get("/reviews/user", verifyToken, async (req, res) => {
   const userId = req.user.userId;
@@ -2742,23 +1984,6 @@ app.get("/reviews/user", verifyToken, async (req, res) => {
   }
 });
 
-// http://localhost:3000/api/voucher-user
-app.get("/voucher-user", verifyToken, async (req, res) => {
-  try {
-    const user_id = req.user.userId;
-
-    const savedVoucherLinks = await VoucherUserModel.find({ user_id });
-
-    const voucherIds = savedVoucherLinks.map((vu) => vu.voucher_id);
-
-    const vouchers = await VoucherModel.find({ _id: { $in: voucherIds } });
-
-    return res.json(vouchers);
-  } catch (err) {
-    console.error("Lỗi lấy voucher theo user:", err);
-    return res.status(500).json({ message: "Đã xảy ra lỗi" });
-  }
-});
 
 
 // ! <== Admin ==>
@@ -3243,6 +2468,16 @@ app.get("/voucher-user", verifyToken, async (req, res) => {
   
   // ! <== User ==>
   // * Role chắc để user = 0, admin = 1, admin cấp cao = 2. Status thì 0 bth, 1 khóa.
+  // API lấy thông tin role mapping
+  app.get("/api/admin/roles", async (req, res) => {
+    const roles = {
+      "0": "Người dùng",
+      "1": "Admin",
+      "2": "Super Admin"
+    };
+    res.json(roles);
+  });
+
   app.get("/api/admin/user", async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -3255,8 +2490,23 @@ app.get("/voucher-user", verifyToken, async (req, res) => {
         .limit(limit)
         .sort({ created_at: -1 })
         .populate("addresses"); // Populate field từ virtual
+
+      // Thêm thông tin role text cho mỗi user
+      const listWithRoleText = list.map(user => {
+        const userObj = user.toObject();
+        const roleText = {
+          "0": "Người dùng",
+          "1": "Admin", 
+          "2": "Super Admin"
+        }[userObj.role] || "Không xác định";
+        
+        return {
+          ...userObj,
+          roleText
+        };
+      });
   
-      res.json({ list, total });
+      res.json({ list: listWithRoleText, total });
     } catch (error) {
       console.error("Lỗi khi truy vấn MongoDB:", error);
       res.status(500).json({ error: "Lỗi khi lấy danh sách người dùng." });
@@ -3280,15 +2530,36 @@ app.get("/voucher-user", verifyToken, async (req, res) => {
     }
   });
   
-  // * Cái này chỉ admin cấp cao mới tạo đc admin, k cho tạo admin cấp cao
-  app.post("/api/admin/user/them", verifyToken, async (req, res) => {
+  // * Đăg nhập để test API không phải chính thức, chính thức sài bên client
+  app.post("/api/login", async (req, res) => {
+    const { username, password } = req.body;
+  
+    const user = await UserModel.findOne({ username });
+    if (!user) return res.status(401).json({ message: "Sai tài khoản" });
+  
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Sai mật khẩu" });
+    }
+  
+    const token = jwt.sign(
+      {
+        _id: user._id,
+        username: user.username,
+        role: user.role,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+  
+    res.json({ message: "Đăng nhập thành công", token });
+  });
+  
+  // * Chỉ Super Admin mới tạo được Admin, không cho tạo Super Admin
+  app.post("/api/admin/user/them", verifyToken, isSuperAdmin, async (req, res) => {
     try {
       const currentUser = req.user;
       console.log(currentUser);
-  
-      if (!currentUser || Number(currentUser.role) !== 2) {
-        return res.status(403).json({ message: "Bạn không có quyền tạo admin." });
-      }
   
       const { username, password, email, role } = req.body;
   
@@ -3336,17 +2607,11 @@ app.get("/voucher-user", verifyToken, async (req, res) => {
     }
   });
   
-  // * Đặt lại mật khẩu
-  app.post("/api/admin/user/doiMk/:id", verifyToken, async (req, res) => {
+  // * Đặt lại mật khẩu - chỉ Super Admin
+  app.post("/api/admin/user/doiMk/:id", verifyToken, isSuperAdmin, async (req, res) => {
     const { id } = req.params;
     const { newPassword } = req.body;
     const currentUser = req.user;
-  
-    if (Number(currentUser.role) !== 2) {
-      return res
-        .status(403)
-        .json({ message: "Bạn không có quyền reset mật khẩu" });
-    }
   
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "ID không hợp lệ" });
@@ -3433,7 +2698,7 @@ app.get("/voucher-user", verifyToken, async (req, res) => {
     }
   });
   
-  app.delete("/api/admin/user/xoa/:id", verifyToken, async (req, res) => {
+  app.delete("/api/admin/user/xoa/:id", verifyToken, canDeleteUser, async (req, res) => {
     const { id } = req.params;
     const currentUser = req.user;
   
@@ -3448,14 +2713,14 @@ app.get("/voucher-user", verifyToken, async (req, res) => {
         return res.status(404).json({ error: "Không tìm thấy người dùng." });
       }
   
-      if (Number(currentUser.role) !== 2) {
-        return res
-          .status(403)
-          .json({ message: "Bạn không có quyền xóa tài khoản." });
-      }
-  
+      // Không thể tự xóa chính mình
       if (targetUser._id.equals(currentUser._id)) {
         return res.status(400).json({ message: "Không thể tự xóa chính mình." });
+      }
+  
+      // Super admin không thể xóa super admin khác
+      if (targetUser.role === "2" && currentUser.role === "2") {
+        return res.status(403).json({ message: "Super Admin không thể xóa Super Admin khác." });
       }
   
       await UserModel.findByIdAndDelete(id);
@@ -3840,6 +3105,10 @@ app.get("/voucher-user", verifyToken, async (req, res) => {
         .limit(limit);
   
       res.json({ list, total });
+      console.log(
+        "Danh sách ID:",
+        list.map((v) => v._id)
+      );
     } catch (error) {
       console.error("Lỗi khi truy vấn cơ sở dữ liệu:", error);
       res.status(500).json({ error: "Lỗi khi lấy danh sách voucher." });
@@ -4079,25 +3348,23 @@ app.get("/voucher-user", verifyToken, async (req, res) => {
     const id = req.params.id;
   
     try {
-      const count = await ProductModel.countDocuments({
-        brand_id: id,
-      });
+      const count = await ProductModel.countDocuments({ brand_id: id });
       if (count > 0) {
         return res.status(400).json({
-          thong_bao: "Không thể xóa vì vẫn còn sản phẩm thuộc thương hiệu này.",
+          thong_bao: "Không thể xóa vì vẫn còn sản phẩm thuộc loại này.",
         });
       }
   
       const deleted = await BrandModel.findByIdAndDelete(id);
   
       if (deleted) {
-        res.json({ message: "Xóa thương hiệu thành công!" });
+        res.json({ message: "Xóa thành công!" });
       } else {
-        res.status(404).json({ error: "Không tìm thấy brand với ID này." });
+        res.status(404).json({ error: "Không tìm thấy thương hiệu với ID này." });
       }
     } catch (error) {
-      console.error("Lỗi khi xóa brand:", error);
-      res.status(500).json({ error: "Lỗi khi xóa thương hiệu." });
+      console.error("Lỗi khi xóa:", error);
+      res.status(500).json({ error: "Lỗi khi xóa." });
     }
   });
   // ! <== End Brand ==>
@@ -4287,5 +3554,332 @@ app.get("/voucher-user", verifyToken, async (req, res) => {
   });
   // ! <== End Payment Method ==>
 
+  // API endpoint cho search suggestions
+  app.get('/api/search/suggestions', async (req, res) => {
+    try {
+      const { q } = req.query;
+      if (!q || q.length < 2) {
+        return res.json({ suggestions: [] });
+      }
 
-server.listen(port, () => console.log(`Ung dung dang chay voi port ${port}`));
+      // Tìm kiếm trong products
+      const products = await ProductModel.find({
+        $or: [
+          { name: { $regex: q, $options: 'i' } },
+          { brand: { $regex: q, $options: 'i' } },
+          { category: { $regex: q, $options: 'i' } }
+        ]
+      }).limit(5);
+
+      // Tìm kiếm trong brands
+      const brands = await BrandModel.find({
+        name: { $regex: q, $options: 'i' }
+      }).limit(3);
+
+      // Tìm kiếm trong categories
+      const categories = await CategoryModel.find({
+        name: { $regex: q, $options: 'i' }
+      }).limit(3);
+
+      const suggestions = [
+        ...products.map(p => ({ name: p.name, type: 'product' })),
+        ...brands.map(b => ({ name: b.name, type: 'brand' })),
+        ...categories.map(c => ({ name: c.name, type: 'category' }))
+      ];
+
+      res.json({ suggestions });
+    } catch (error) {
+      console.error('Search suggestions error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // API endpoint cho search chính
+  app.get('/api/search', async (req, res) => {
+    try {
+      const { q, brand, category, priceRange, sortBy } = req.query;
+      
+      let query = {};
+      
+      // Tìm kiếm theo từ khóa
+      if (q) {
+        query.$or = [
+          { name: { $regex: q, $options: 'i' } },
+          { description: { $regex: q, $options: 'i' } },
+          { brand: { $regex: q, $options: 'i' } },
+          { category: { $regex: q, $options: 'i' } }
+        ];
+      }
+
+      // Filter theo brand
+      if (brand) {
+        query.brand = { $regex: brand, $options: 'i' };
+      }
+
+      // Filter theo category
+      if (category) {
+        query.category = { $regex: category, $options: 'i' };
+      }
+
+      // Filter theo price range
+      if (priceRange) {
+        const [min, max] = priceRange.split('-');
+        if (max === '+') {
+          query.price = { $gte: parseInt(min) };
+        } else {
+          query.price = { $gte: parseInt(min), $lte: parseInt(max) };
+        }
+      }
+
+      // Sort options
+      let sort = {};
+      switch (sortBy) {
+        case 'price-asc':
+          sort = { price: 1 };
+          break;
+        case 'price-desc':
+          sort = { price: -1 };
+          break;
+        case 'name-asc':
+          sort = { name: 1 };
+          break;
+        default:
+          sort = { createdAt: -1 };
+      }
+
+      const products = await ProductModel.find(query)
+        .sort(sort)
+        .limit(50)
+        .lean(); // Sử dụng lean() để tối ưu performance
+
+      // Lấy ảnh cho từng sản phẩm
+      const productsWithImages = await Promise.all(
+        products.map(async (product) => {
+          const images = await ProductImageModel.find({ 
+            product_id: product._id 
+          }).sort({ is_main: -1 }).lean(); // Sắp xếp ảnh chính lên đầu
+          
+          return {
+            ...product,
+            images: images.map(img => img.image)
+          };
+        })
+      );
+
+      res.json({ products: productsWithImages });
+    } catch (error) {
+      console.error('Search error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // API lấy danh mục tin tức cho client
+  app.get('/api/category-news', async (req, res) => {
+    try {
+      const categories = await CategoryNewsModel.find({ status: 0 }) // Chỉ lấy danh mục đang hoạt động
+        .sort({ created_at: -1 });
+      res.json(categories);
+    } catch (err) {
+      res.status(500).json({ error: 'Lỗi lấy danh mục tin tức', details: err });
+    }
+  });
+
+  app.post('/request-password-reset',
+    body('email').isEmail().withMessage('Email không hợp lệ.'),
+    async (req, res) => {
+      try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+          return res.status(400).json({ message: errors.array()[0].msg });
+        }
+
+        const { email } = req.body;
+        const user = await User.findOne({ email: email, account_status: '1' });
+
+        if (!user) {
+          return res.status(404).json({ message: 'Không tìm thấy tài khoản hoạt động với email này.' });
+        }
+
+        const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
+        user.passwordResetToken = resetToken;
+        user.passwordResetTokenExpires = new Date(Date.now() + 10 * 60 * 1000); // Hết hạn sau 10 phút
+        await user.save();
+
+        const mailOptions = {
+          from: `"V.CLOCK" <${process.env.EMAIL_USER}>`,
+          to: user.email,
+          subject: 'Yêu cầu đặt lại mật khẩu cho tài khoản V.CLOCK',
+          html: `<p>Chào bạn,</p>
+                 <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Mã OTP để đặt lại mật khẩu là:</p>
+                 <h2 style="text-align:center;color:#d9534f;">${resetToken}</h2>
+                 <p>Mã này sẽ hết hạn trong 10 phút. Nếu bạn không yêu cầu, vui lòng bỏ qua email này.</p>
+                 <p>Trân trọng,<br/>Đội ngũ V.CLOCK</p>`,
+        };
+
+        await transporter.sendMail(mailOptions);
+
+        res.status(200).json({ message: 'Yêu cầu thành công. Vui lòng kiểm tra email để lấy mã OTP.' });
+
+      } catch (error) {
+        console.error('Request password reset error:', error);
+        res.status(500).json({ message: 'Lỗi server', error: error.message });
+      }
+  });
+
+  app.post('/reset-password',
+    body('email').isEmail().withMessage('Email không hợp lệ.'),
+    body('otp').isLength({ min: 6, max: 6 }).withMessage('Mã OTP phải có 6 chữ số.'),
+    body('newPassword').isLength({ min: 6 }).withMessage('Mật khẩu mới phải có ít nhất 6 ký tự.'),
+    async (req, res) => {
+      try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+          return res.status(400).json({ message: errors.array()[0].msg });
+        }
+        
+        const { email, otp, newPassword } = req.body;
+
+        const user = await User.findOne({
+          email: email,
+          passwordResetToken: otp,
+          passwordResetTokenExpires: { $gt: Date.now() },
+        });
+
+        if (!user) {
+          return res.status(400).json({ message: 'Mã OTP không hợp lệ hoặc đã hết hạn.' });
+        }
+
+        const saltRounds = 10;
+        user.password_hash = await bcrypt.hash(newPassword, saltRounds);
+        user.passwordResetToken = null;
+        user.passwordResetTokenExpires = null;
+        await user.save();
+
+        res.status(200).json({ message: 'Mật khẩu đã được đặt lại thành công. Bạn có thể đăng nhập ngay bây giờ.' });
+
+      } catch (error) {
+        console.error('Reset password error:', error);
+        res.status(500).json({ message: 'Lỗi server', error: error.message });
+      }
+  });
+
+  // API endpoint cho contact form
+  app.post('/api/contact',
+    body('name').notEmpty().withMessage('Tên không được để trống.'),
+    body('email').isEmail().withMessage('Email không hợp lệ.'),
+    body('message').notEmpty().withMessage('Nội dung tin nhắn không được để trống.'),
+    async (req, res) => {
+      try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+          return res.status(400).json({ message: errors.array()[0].msg });
+        }
+
+        const { name, email, phone, company, message } = req.body;
+
+        // Gửi email đến admin
+        const adminMailOptions = {
+          from: `"V.CLOCK Contact Form" <${process.env.EMAIL_USER}>`,
+          to: process.env.EMAIL_USER, // Email admin
+          subject: 'Tin nhắn liên hệ mới từ V.CLOCK',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #d9534f; border-bottom: 2px solid #d9534f; padding-bottom: 10px;">
+                Tin Nhắn Liên Hệ Mới
+              </h2>
+              
+              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #333; margin-top: 0;">Thông Tin Người Gửi:</h3>
+                <p><strong>Họ và Tên:</strong> ${name}</p>
+                <p><strong>Email:</strong> ${email}</p>
+                ${phone ? `<p><strong>Số Điện Thoại:</strong> ${phone}</p>` : ''}
+                ${company ? `<p><strong>Công Ty:</strong> ${company}</p>` : ''}
+              </div>
+
+              <div style="background-color: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+                <h3 style="color: #333; margin-top: 0;">Nội Dung Tin Nhắn:</h3>
+                <p style="line-height: 1.6; white-space: pre-wrap;">${message}</p>
+              </div>
+
+              <div style="margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 8px;">
+                <p style="margin: 0; color: #666; font-size: 14px;">
+                  <strong>Thời gian:</strong> ${new Date().toLocaleString('vi-VN')}<br>
+                  <strong>IP:</strong> ${req.ip}<br>
+                  <strong>User Agent:</strong> ${req.get('User-Agent')}
+                </p>
+              </div>
+            </div>
+          `,
+        };
+
+        // Gửi email xác nhận cho khách hàng
+        const customerMailOptions = {
+          from: `"V.CLOCK" <${process.env.EMAIL_USER}>`,
+          to: email,
+          subject: 'Xác nhận tin nhắn liên hệ - V.CLOCK',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #d9534f; border-bottom: 2px solid #d9534f; padding-bottom: 10px;">
+                Xác Nhận Tin Nhắn Liên Hệ
+              </h2>
+              
+              <p>Chào <strong>${name}</strong>,</p>
+              
+              <p>Cảm ơn bạn đã liên hệ với V.CLOCK. Chúng tôi đã nhận được tin nhắn của bạn và sẽ phản hồi trong thời gian sớm nhất.</p>
+              
+              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #333; margin-top: 0;">Thông Tin Tin Nhắn:</h3>
+                <p><strong>Thời gian gửi:</strong> ${new Date().toLocaleString('vi-VN')}</p>
+                <p><strong>Nội dung:</strong></p>
+                <div style="background-color: #fff; padding: 15px; border: 1px solid #ddd; border-radius: 5px; margin-top: 10px;">
+                  <p style="line-height: 1.6; white-space: pre-wrap; margin: 0;">${message}</p>
+                </div>
+              </div>
+
+              <p>Nếu bạn có bất kỳ câu hỏi nào khác, vui lòng liên hệ với chúng tôi qua:</p>
+              <ul>
+                <li>Email: contact@vclock.vn</li>
+                <li>Điện thoại: 0909 123 456</li>
+                <li>Địa chỉ: 1073/23 Cách Mạng Tháng 8, Phường 7, Quận Tân Bình, TP. Hồ Chí Minh</li>
+              </ul>
+
+              <p style="margin-top: 30px; color: #666; font-size: 14px;">
+                Trân trọng,<br>
+                <strong>Đội ngũ V.CLOCK</strong>
+              </p>
+            </div>
+          `,
+        };
+
+        // Gửi cả hai email
+        await Promise.all([
+          transporter.sendMail(adminMailOptions),
+          transporter.sendMail(customerMailOptions)
+        ]);
+
+        res.status(200).json({ 
+          message: 'Tin nhắn của bạn đã được gửi thành công! Chúng tôi sẽ liên hệ lại sớm.',
+          success: true 
+        });
+
+      } catch (error) {
+        console.error('Contact form error:', error);
+        res.status(500).json({ 
+          message: 'Có lỗi xảy ra khi gửi tin nhắn. Vui lòng thử lại sau.',
+          error: error.message 
+        });
+      }
+  });
+
+  // Khôi phục lại app.listen để server thực sự chạy và lắng nghe
+  app.listen(PORT, () => {
+    console.log(`Backend server is running and listening on port ${PORT}`);
+  });
+
+ 
+  // const brandRoute = require('./routes/brand');
+  // // ... existing code ...
+  // app.use('/api', brandRoute);
+  // const reviewRoute = require('./routes/review');
+  // app.use('/api', reviewRoute);
+  // ... existing code ...
